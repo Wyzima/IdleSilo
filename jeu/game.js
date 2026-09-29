@@ -146,6 +146,7 @@
     patents: $('patents'), patentBonus: $('patent-bonus'), prestige: $('prestige'),
     achCount: $('ach-count'), achList: $('ach-list'),
     toast: $('toast'), reset: $('reset'),
+    confirm: $('confirm'), confirmText: $('confirm-text'), confirmOk: $('confirm-ok'), confirmCancel: $('confirm-cancel'),
   };
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const svg = (tag, attrs) => {
@@ -237,20 +238,46 @@
     const gain = patentsGain();
     if (gain < 1) return;
     const msg = `Déposer ${gain} brevet(s) ? L'usine repart de zéro, mais chaque brevet donne +5 % sur toutes les ventes, pour toujours.`;
-    if (!confirm(msg)) return;
-    state = { ...state, ...freshRun(), patents: state.patents + gain };
-    audio.play('achievement');
-    toast(`${gain} brevet(s) déposé(s) ! Bonus permanent : +${fmt(state.patents * 5)} %`);
-    save();
+    askConfirm(msg, 'Déposer les brevets', () => {
+      const g = patentsGain();
+      if (g < 1) return;
+      state = { ...state, ...freshRun(), patents: state.patents + g };
+      audio.play('achievement');
+      toast(`${g} brevet(s) déposé(s) ! Bonus permanent : +${fmt(state.patents * 5)} %`);
+      save();
+    });
   }
 
   ui.prestige.addEventListener('click', prestige);
 
   ui.reset.addEventListener('click', () => {
-    if (!confirm('Effacer toute votre progression, y compris les brevets et les succès ?')) return;
-    state = freshState();
-    save();
+    askConfirm('Effacer toute votre progression, y compris les brevets et les succès ?', 'Tout effacer', () => {
+      state = freshState();
+      save();
+    });
   });
+
+  // Confirmation intégrée à la page (les fenêtres confirm() du navigateur
+  // sont bloquées quand le jeu est affiché dans un cadre).
+  let confirmAction = null;
+  function askConfirm(message, okLabel, action) {
+    ui.confirmText.textContent = message;
+    ui.confirmOk.textContent = okLabel;
+    confirmAction = action;
+    ui.confirm.hidden = false;
+    ui.confirmOk.focus();
+  }
+  function closeConfirm() {
+    ui.confirm.hidden = true;
+    confirmAction = null;
+  }
+  ui.confirmOk.addEventListener('click', () => {
+    const action = confirmAction;
+    closeConfirm();
+    if (action) action();
+  });
+  ui.confirmCancel.addEventListener('click', closeConfirm);
+  ui.confirm.addEventListener('keydown', e => { if (e.key === 'Escape') closeConfirm(); });
 
   ui.sound.addEventListener('click', () => {
     const on = audio.toggle();
