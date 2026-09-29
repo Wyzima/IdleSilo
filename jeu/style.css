@@ -1,0 +1,258 @@
+/* Charte reprise d'exventys.com : or #E5B034, noir, Roboto / Roboto Slab */
+:root {
+  --gold: #e5b034;
+  --gold-dark: #dfaa0a;
+  --black: #000;
+  --ink: #32373c;
+  --muted: #6d6d6d;
+  --line: #dcd7ca;
+  --bg: #fff;
+  --soft: #f5efe0;
+  --sky: #f7f5ef;
+  --screw: #7a0f1c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Roboto, Arial, sans-serif;
+}
+
+/* ---------- Bandeau ---------- */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 32px;
+  padding: 14px 24px;
+  background: var(--black);
+  color: #fff;
+  border-bottom: 4px solid var(--gold);
+}
+.topbar h1 {
+  margin: 0;
+  font-family: "Roboto Slab", serif;
+  font-size: 1.6rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.topbar h1 span { color: var(--gold); }
+
+.scores { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }
+.scores div { min-width: 110px; }
+.scores dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: #bbb; }
+.scores dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
+
+/* ---------- Mise en page ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  min-height: calc(100vh - 80px);
+}
+
+.scene-wrap { padding: 16px; background: var(--sky); }
+.scene { width: 100%; height: auto; display: block; max-height: 75vh; }
+.caption { margin: 8px 4px 0; font-size: .9rem; color: var(--muted); }
+.caption strong { color: var(--ink); }
+.auto-status { margin-left: 6px; color: var(--gold-dark); font-weight: 500; }
+
+/* ---------- Scène SVG ---------- */
+.ground { fill: #d9d2bf; }
+
+.silo { cursor: pointer; outline: none; }
+.silo .leg { stroke: #555; stroke-width: 8; }
+.silo .roof { fill: #555; }
+.silo-bg { fill: #fff; }
+.silo-shell { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linejoin: round; }
+.silo .ring { stroke: var(--ink); stroke-opacity: .25; stroke-width: 2; }
+.silo .outlet { fill: #555; }
+.silo:hover .silo-shell, .silo:focus-visible .silo-shell { stroke: var(--gold); }
+.silo.bump { animation: bump .18s ease-out; transform-origin: 150px 400px; }
+@keyframes bump { 50% { transform: scale(1.03, .98); } }
+#silo-fill { transition: y .15s linear, height .15s linear; stroke: rgba(0, 0, 0, .25); stroke-width: 1; }
+.silo-label {
+  font: 700 18px Roboto, sans-serif;
+  text-anchor: middle;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+  pointer-events: none;
+}
+
+.prompt { pointer-events: none; animation: pulse 1s ease-in-out infinite; transform-origin: 150px 167px; }
+.prompt rect { fill: var(--gold); }
+.prompt text { font: 700 18px Roboto, sans-serif; text-anchor: middle; fill: #000; }
+.prompt[hidden], .prompt.off { display: none; }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+
+.motor { fill: #444; }
+.trough { fill: rgba(255, 255, 255, .25); stroke: #888; stroke-width: 2; }
+.core { fill: var(--screw); }
+.flights ellipse { fill: url(#flight-grad); stroke: #3b050c; stroke-width: 1.5; }
+.flights { animation: turn 1s linear infinite; animation-play-state: paused; }
+.flights.running { animation-play-state: running; }
+@keyframes turn { to { transform: translateX(32px); } }
+
+.stream { opacity: 0; transition: opacity .2s; }
+.stream.on { opacity: 1; }
+
+.bed { fill: #e5b034; stroke: #9c7414; stroke-width: 3; fill-opacity: .15; }
+.cab { fill: var(--gold); stroke: #9c7414; stroke-width: 3; }
+.window { fill: #cfe3ee; }
+.chassis { fill: #333; }
+.wheel { fill: #1c1c1c; stroke: #777; stroke-width: 6; }
+#pile { stroke: rgba(0, 0, 0, .25); stroke-width: 1; }
+.truck-label {
+  font: 700 15px Roboto, sans-serif;
+  text-anchor: middle;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+}
+.truck.leaving { animation: drive var(--leave, 3s) ease-in-out; }
+@keyframes drive {
+  0% { transform: translateX(0); }
+  45% { transform: translateX(340px); }
+  46% { transform: translateX(-640px); }
+  100% { transform: translateX(0); }
+}
+
+.floater {
+  font: 700 22px Roboto, sans-serif;
+  fill: var(--gold-dark);
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+  text-anchor: middle;
+  pointer-events: none;
+  animation: float 1s ease-out forwards;
+}
+@keyframes float { to { transform: translateY(-60px); opacity: 0; } }
+
+/* ---------- Boutique ---------- */
+.shop {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: #fff;
+  max-height: calc(100vh - 80px);
+  position: sticky;
+  top: 0;
+}
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button {
+  flex: 1;
+  padding: 14px 8px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  font: 500 .85rem Roboto, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tabs button[aria-selected="true"] { color: #000; border-bottom-color: var(--gold); }
+
+.panel { padding: 12px 16px; overflow-y: auto; flex: 1; }
+.panel-intro { margin: 0 0 12px; font-size: .85rem; color: var(--muted); }
+
+.items, .materials { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.item:hover:not(:disabled) { border-color: var(--gold); background: var(--soft); }
+.item:disabled { cursor: not-allowed; opacity: .5; }
+.item .name { font-weight: 700; color: #000; }
+.item .level { grid-row: span 3; align-self: center; font: 700 1.5rem "Roboto Slab", serif; color: var(--gold-dark); }
+.item .effect { font-size: .82rem; color: var(--muted); }
+.item .cost { font-size: .85rem; font-weight: 500; color: var(--ink); }
+.item.hidden-item .name { color: var(--muted); }
+.item.maxed .cost { color: var(--gold-dark); }
+
+.materials { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.mat {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mat .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .3); grid-row: span 2; }
+.mat .mname { font-weight: 500; font-size: .85rem; color: #000; }
+.mat .minfo { font-size: .75rem; color: var(--muted); }
+.mat:hover:not(:disabled) { border-color: var(--gold); }
+.mat.selected { border: 2px solid var(--gold); background: var(--soft); }
+.mat.locked .mname { color: var(--muted); }
+.mat:disabled { cursor: not-allowed; opacity: .5; }
+
+.tools { padding: 12px 16px; border-top: 1px solid var(--line); text-align: right; }
+.tools button {
+  background: none;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translate(-50%, 200%);
+  background: #000;
+  color: var(--gold);
+  border-left: 4px solid var(--gold);
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: transform .3s, visibility .3s;
+  visibility: hidden;
+  max-width: calc(100vw - 32px);
+  z-index: 10;
+}
+.toast.show { transform: translate(-50%, 0); visibility: visible; }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .shop { position: static; max-height: none; border-left: 0; border-top: 4px solid var(--gold); }
+  .topbar { padding: 12px 16px; }
+  .scores div { min-width: 0; }
+  .scores dd { font-size: 1.05rem; }
+  .silo-label, .prompt text { font-size: 28px; }
+  .truck-label { font-size: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flights, .prompt, .truck.leaving, .floater { animation: none !important; }
+}

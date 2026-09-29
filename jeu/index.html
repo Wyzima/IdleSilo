@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Idle Silo – Exventys</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Slab:wght@500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Idle <span>Silo</span></h1>
+    <dl class="scores">
+      <div><dt>Trésorerie</dt><dd id="money">0 €</dd></div>
+      <div><dt>Revenu auto</dt><dd id="income">0 €/s</dd></div>
+      <div><dt>Camions livrés</dt><dd id="trucks">0</dd></div>
+      <div><dt>Tonnage total</dt><dd id="tonnage">0 t</dd></div>
+    </dl>
+  </header>
+
+  <main class="layout">
+    <section class="scene-wrap" aria-label="Ligne de production">
+      <svg id="scene" class="scene" viewBox="0 0 800 440" role="img" aria-labelledby="scene-title">
+        <title id="scene-title">Un silo se vide par une vis d'Archimède dans un camion</title>
+        <defs>
+          <clipPath id="silo-clip">
+            <path d="M70 60 H230 V270 L166 340 H134 L70 270 Z"/>
+          </clipPath>
+          <clipPath id="screw-clip">
+            <rect x="24" y="-26" width="452" height="52"/>
+          </clipPath>
+          <linearGradient id="flight-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#b3202f"/>
+            <stop offset=".55" stop-color="#7a0f1c"/>
+            <stop offset="1" stop-color="#4d0811"/>
+          </linearGradient>
+          <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#d9d9d9"/>
+            <stop offset=".5" stop-color="#a6a6a6"/>
+            <stop offset="1" stop-color="#6e6e6e"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Sol -->
+        <rect x="0" y="400" width="800" height="40" class="ground"/>
+
+        <!-- Silo (cliquable) -->
+        <g id="silo" class="silo" role="button" tabindex="0" aria-label="Remplir le silo">
+          <line x1="84" y1="270" x2="84" y2="400" class="leg"/>
+          <line x1="216" y1="270" x2="216" y2="400" class="leg"/>
+          <path d="M60 60 L150 22 L240 60 Z" class="roof"/>
+          <path d="M70 60 H230 V270 L166 340 H134 L70 270 Z" class="silo-bg"/>
+          <g clip-path="url(#silo-clip)">
+            <rect id="silo-fill" x="60" y="340" width="180" height="0"/>
+          </g>
+          <path d="M70 60 H230 V270 L166 340 H134 L70 270 Z" class="silo-shell"/>
+          <line x1="70" y1="130" x2="230" y2="130" class="ring"/>
+          <line x1="70" y1="200" x2="230" y2="200" class="ring"/>
+          <rect x="138" y="340" width="24" height="22" class="outlet"/>
+          <text id="silo-label" x="150" y="100" class="silo-label">0 / 5 t</text>
+          <g id="silo-prompt" class="prompt">
+            <rect x="82" y="148" width="136" height="38" rx="19"/>
+            <text x="150" y="173">Cliquez !</text>
+          </g>
+        </g>
+
+        <!-- Vis d'Archimède -->
+        <g transform="translate(150 372) rotate(-18)">
+          <rect x="-34" y="-20" width="36" height="40" rx="4" class="motor"/>
+          <rect x="0" y="-5" width="500" height="10" fill="url(#steel)"/>
+          <rect x="24" y="-26" width="452" height="52" rx="4" class="trough"/>
+          <g clip-path="url(#screw-clip)">
+            <rect x="24" y="-9" width="452" height="18" class="core"/>
+            <g id="flights" class="flights"></g>
+          </g>
+          <rect x="476" y="-11" width="30" height="22" fill="url(#steel)"/>
+        </g>
+
+        <!-- Chute de matière -->
+        <rect id="stream" x="624" y="222" width="14" height="90" class="stream"/>
+
+        <!-- Camion -->
+        <g id="truck" class="truck">
+          <path id="pile" d="M530 334 L631 334 L702 334 Z"/>
+          <path d="M526 280 H706 V334 H526 Z" class="bed"/>
+          <path d="M710 292 H752 L774 318 V360 H710 Z" class="cab"/>
+          <path d="M718 298 H748 L764 318 H718 Z" class="window"/>
+          <rect x="520" y="334" width="256" height="26" class="chassis"/>
+          <circle cx="566" cy="370" r="20" class="wheel"/>
+          <circle cx="620" cy="370" r="20" class="wheel"/>
+          <circle cx="740" cy="370" r="20" class="wheel"/>
+          <text id="truck-label" x="616" y="312" class="truck-label">0 / 10 t</text>
+        </g>
+      </svg>
+      <p class="caption">
+        Matériau actuel : <strong id="current-material">Sable</strong>
+        · <span id="current-price">10 €/t</span>
+        · Vis : <span id="screw-rate">0,5 t/s</span>
+        <span id="auto-status" class="auto-status"></span>
+      </p>
+    </section>
+
+    <aside class="shop">
+      <nav class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="equip">Équipement</button>
+        <button role="tab" aria-selected="false" data-tab="lines">Automatisation</button>
+        <button role="tab" aria-selected="false" data-tab="materials">Matériaux</button>
+      </nav>
+
+      <div class="panel" data-panel="equip">
+        <p class="panel-intro">Améliorez la ligne principale : silo, vis, camion.</p>
+        <ul id="equip-list" class="items"></ul>
+      </div>
+      <div class="panel" data-panel="lines" hidden>
+        <p class="panel-intro">Des lignes qui livrent toutes seules, même quand vous êtes absent.</p>
+        <ul id="lines-list" class="items"></ul>
+      </div>
+      <div class="panel" data-panel="materials" hidden>
+        <p class="panel-intro">Débloquez des matériaux plus rentables. Le choix s'applique au prochain remplissage.</p>
+        <ul id="materials-list" class="materials"></ul>
+      </div>
+
+      <footer class="tools">
+        <button id="reset" type="button">Recommencer la partie</button>
+      </footer>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="game.js"></script>
+</body>
+</html>
