@@ -162,11 +162,12 @@
 
   // ---------- Presse à injection ----------
   const combo = { heat: 0, last: -1e9 };
-  // Première version de l'atelier, avec un gain par clic divisé par 5.
-  const PRESS_DIVISOR = 5;
-  const partValue = (t = state.press.tier) => (5 * Math.pow(6, t)) / PRESS_DIVISOR; // 1 €, 6 €, 36 €…
-  const moldCount = (l = state.press.molds) => Math.pow(2, l);                      // 1 à 256 pièces
-  const incomeShare = (l = state.press.eng) => (0.03 + 0.03 * l) / PRESS_DIVISOR;   // 0,6 % à 6,6 % du revenu auto
+  // Gains progressifs : peu au début, beaucoup en fin de partie.
+  // Les pièces et le moule progressent modérément ; c'est la part du revenu
+  // automatique qui accélère avec l'ingénierie de production (×1,48 par niveau).
+  const partValue = (t = state.press.tier) => Math.pow(3, t);                  // 1 €, 3 €, 9 €… 2 187 €
+  const moldCount = (l = state.press.molds) => 1 + l;                          // 1 à 9 pièces par clic
+  const incomeShare = (l = state.press.eng) => 0.002 * Math.pow(1.48, l);      // 0,2 % → 10 % du revenu auto
   const comboMult = () => 1 + (combo.heat / COMBO_MAX) * 4;
   const pressUpCost = u => u.costBase * Math.pow(u.costGrowth, state.press[u.id]);
   // Gain d'un clic : la pièce moulée, plus une part du revenu automatique.
