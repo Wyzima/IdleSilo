@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const { roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS, audio } = window.IdleSilo;
+  const { roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS, audio, createScene } = window.IdleSilo;
 
   const SAVE_KEY = 'idle-silo-save-v3';
   const OFFLINE_CAP_SECONDS = 8 * 3600;
@@ -109,11 +109,11 @@
   // Modèles de camion : plus la benne est grande, plus le véhicule s'allonge.
   // beds = longueur de chaque benne ou remorque, de l'arrière vers la cabine.
   const TRUCK_MODELS = [
-    { from: 0, name: 'Camion benne', beds: [180] },
-    { from: 3, name: 'Porteur 8×4', beds: [240] },
-    { from: 6, name: 'Semi-remorque', beds: [320] },
-    { from: 10, name: 'Train routier', beds: [220, 220] },
-    { from: 15, name: 'Convoi exceptionnel', beds: [220, 220, 240] },
+    { from: 0, name: 'Camion benne', beds: [120] },
+    { from: 3, name: 'Porteur 8×4', beds: [160] },
+    { from: 6, name: 'Semi-remorque', beds: [215] },
+    { from: 10, name: 'Train routier', beds: [145, 145] },
+    { from: 15, name: 'Convoi exceptionnel', beds: [145, 145, 155] },
   ];
   const truckModelOf = l => TRUCK_MODELS.filter(m => l >= m.from).pop();
   const truckModel = l => truckModelOf(l).name;
@@ -179,12 +179,10 @@
   const $ = id => document.getElementById(id);
   const ui = {
     money: $('money'), income: $('income'), trucks: $('trucks'), tonnage: $('tonnage'), sound: $('sound'),
-    scene: $('scene'), silo: $('silo'), siloFill: $('silo-fill'), siloLabel: $('silo-label'),
-    prompt: $('silo-prompt'), flights: $('flights'), grains: $('grains'), particles: $('particles'),
-    stream: $('stream'), truck: $('truck'), ground: $('ground'), sceneLabel: $('scene-label'),
+    scene: $('scene'), buildBtn: $('build-silo'), sceneHint: $('scene-hint'),
     curMat: $('current-material'), curPrice: $('current-price'), screwRate: $('screw-rate'),
     bucket: $('bucket-size'), truckInfo: $('truck-info'), autoStatus: $('auto-status'),
-    sites: $('sites'), feed: $('feed'), feedFlow: $('feed-flow'), equipTitle: $('equip-title'),
+    equipTitle: $('equip-title'),
     linesMaterial: $('lines-material'),
     ordersLocked: $('orders-locked'), orderActive: $('order-active'), orderClient: $('order-client'),
     orderTimer: $('order-timer'), orderWhat: $('order-what'), orderBar: $('order-bar'),
@@ -197,18 +195,6 @@
     toast: $('toast'), reset: $('reset'),
     confirm: $('confirm'), confirmText: $('confirm-text'), confirmOk: $('confirm-ok'), confirmCancel: $('confirm-cancel'),
   };
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-  const svg = (tag, attrs) => {
-    const el = document.createElementNS(SVG_NS, tag);
-    for (const k in attrs) el.setAttribute(k, attrs[k]);
-    return el;
-  };
-
-  // Spires de la vis, dessinées une fois puis animées en translation.
-  for (let x = -8; x <= 500; x += 32) {
-    ui.flights.appendChild(svg('ellipse', { cx: x, cy: 0, rx: 7, ry: 24, transform: `rotate(-22 ${x} 0)` }));
-  }
-
   // ---------- Actions du joueur ----------
 
   // Verse un godet dans le silo d'un site, avec le matériau choisi pour ce site.
@@ -231,21 +217,21 @@
     return newTons;
   }
 
-  function onSiloClick(e) {
-    const tons = addBucket(cur(), true);
-    ui.silo.classList.remove('bump');
-    void ui.silo.getBBox();
-    ui.silo.classList.add('bump');
-    if (tons > 0) {
-      audio.play('bucket');
-      floater(e, `+${fmtT(tons)}`);
-    }
+  // Clic sur un silo de la scène : il devient le silo sélectionné,
+  // et un clic sur le silo lui-même y verse un godet.
+  function onUnitClick(i, onSilo) {
+    selectSite(i);
+    if (onSilo) pourBucket(i);
   }
 
-  ui.silo.addEventListener('click', onSiloClick);
-  ui.silo.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSiloClick(e); }
-  });
+  function pourBucket(i) {
+    const tons = addBucket(state.sites[i], true);
+    scene.bump(i);
+    if (tons > 0) {
+      audio.play('bucket');
+      scene.floater(i, 'silo', `+${fmtT(tons)}`);
+    }
+  }
 
   function buyEquipment(eq) {
     const cost = equipCost(eq);
@@ -267,14 +253,12 @@
     audio.play('buy');
     selectSite(n);
     toast(`Silo ${n + 1} construit ! Il se remplit tout seul. Choisissez son matériau à droite.`);
-    toast('Cliquez sur les cartes en haut pour passer d\'un silo à l\'autre.');
+    toast('Cliquez sur un silo dans l\'image pour le sélectionner.');
   }
 
   function selectSite(i) {
     if (i === state.selected || !state.sites[i]) return;
     state.selected = i;
-    clearParticles();
-    truckKey = '';
   }
 
   function buyLine(line) {
@@ -313,6 +297,7 @@
       const g = patentsGain();
       if (g < 1) return;
       state = { ...state, ...freshRun(), patents: state.patents + g };
+      scene.reset();
       audio.play('achievement');
       toast(`${g} brevet(s) déposé(s) ! Bonus permanent : +${fmt(state.patents * 5)} %`);
       save();
@@ -324,6 +309,7 @@
   ui.reset.addEventListener('click', () => {
     askConfirm('Effacer toute votre progression, y compris les brevets et les succès ?', 'Tout effacer', () => {
       state = freshState();
+      scene.reset();
       save();
     });
   });
@@ -378,24 +364,6 @@
       ui.toast.classList.remove('show');
       setTimeout(nextToast, 350);
     }, toastQueue.length ? 2200 : 3500);
-  }
-
-  function floaterAt(x, y, text) {
-    const t = svg('text', { x, y, class: 'floater' });
-    t.textContent = text;
-    ui.scene.appendChild(t);
-    t.addEventListener('animationend', () => t.remove());
-  }
-
-  function floater(e, text) {
-    let x = 150, y = 150;
-    if (e && e.clientX) {
-      const pt = ui.scene.createSVGPoint();
-      pt.x = e.clientX; pt.y = e.clientY;
-      const p = pt.matrixTransform(ui.scene.getScreenCTM().inverse());
-      x = p.x; y = p.y;
-    }
-    floaterAt(x, y, text);
   }
 
   // ---------- Commandes clients ----------
@@ -457,7 +425,6 @@
       o.active = null;
       audio.play('order');
       toast(`Commande honorée : +${fmtE(reward)}`);
-      floaterAt(400, 120, `+${fmtE(reward)}`);
     } else if (a.remaining <= 0) {
       o.active = null;
       audio.play('fail');
@@ -527,14 +494,9 @@
     state.stats.trucks++;
     site.truck = { load: 0, value: 0, mix: {}, color: t.color };
     site.leaving = truckRotation();
-    // Animation et son seulement pour le silo affiché.
-    if (i !== state.selected) return;
-    ui.truck.style.setProperty('--leave', `${truckRotation()}s`);
-    ui.truck.classList.remove('leaving');
-    void ui.truck.getBBox();
-    ui.truck.classList.add('leaving');
-    audio.play('horn');
-    floaterAt(640, 250, `+${fmtE(value)}`);
+    scene.floater(i, 'truck', `+${fmtE(value)}`);
+    // Le klaxon seulement pour le silo sélectionné, pour ne pas saturer.
+    if (i === state.selected) audio.play('horn');
   }
 
   function checkAchievements() {
@@ -546,210 +508,69 @@
     }
   }
 
-  // ---------- Particules (grains et poussière) ----------
+  // ---------- Scène ----------
 
-  const OUTLET = { x: 631, y: 218 };
-  const grainPool = [];   // grains dans la vis (repère local de la vis)
-  const falling = [];     // grains qui tombent dans la benne
-  const dust = [];        // nuages de poussière
-  let grainSpawn = 0;
-  let pileTop = 334;
-  let screwSpeedPx = 32;  // vitesse d'avance des spires en px/s
+  const scene = createScene(ui.scene, {
+    onUnit: onUnitClick,
+    onPad: buySite,
+  });
 
-  function spawnGrain(color) {
-    if (grainPool.length > 70) return;
-    const el = svg('circle', { r: rand(2, 3.4).toFixed(1), class: 'grain', fill: color });
-    ui.grains.appendChild(el);
-    grainPool.push({ el, x: 26, y: rand(-3, 12) });
-  }
-
-  function spawnFalling(color) {
-    if (falling.length > 60) return;
-    const el = svg('circle', { r: rand(1.8, 3).toFixed(1), class: 'grain', fill: color });
-    ui.particles.appendChild(el);
-    falling.push({ el, x: OUTLET.x + rand(-4, 4), y: OUTLET.y, vy: rand(20, 60), vx: rand(-15, 15) });
-  }
-
-  function spawnDust(x, y, color) {
-    if (dust.length > 30) return;
-    const el = svg('circle', { r: 3, class: 'dust', fill: color });
-    ui.particles.appendChild(el);
-    dust.push({ el, x: x + rand(-10, 10), y, age: 0, life: rand(0.5, 0.9), vx: rand(-20, 20) });
-  }
-
-  function stepParticles(dt) {
-    if (reducedMotion) return;
-    const site = cur();
-    const on = flowing[state.selected];
-    const color = site.silo.color;
-
-    if (on) {
-      grainSpawn += dt * Math.min(40, 8 + screwVolume() * 10);
-      while (grainSpawn >= 1) { grainSpawn -= 1; spawnGrain(color); }
-    }
-
-    // Les grains avancent avec les spires, seulement quand la vis tourne.
-    for (let i = grainPool.length - 1; i >= 0; i--) {
-      const g = grainPool[i];
-      if (on) g.x += screwSpeedPx * dt;
-      if (g.x > 478) {
-        g.el.remove();
-        grainPool.splice(i, 1);
-        spawnFalling(g.el.getAttribute('fill'));
-        continue;
-      }
-      g.el.setAttribute('cx', g.x.toFixed(1));
-      g.el.setAttribute('cy', g.y.toFixed(1));
-    }
-
-    for (let i = falling.length - 1; i >= 0; i--) {
-      const p = falling[i];
-      p.vy += 900 * dt;
-      p.y += p.vy * dt;
-      p.x += p.vx * dt;
-      const floor = site.leaving > 0 ? 398 : pileTop;
-      if (p.y >= floor) {
-        if (Math.random() < 0.35) spawnDust(p.x, floor, p.el.getAttribute('fill'));
-        p.el.remove();
-        falling.splice(i, 1);
-        continue;
-      }
-      p.el.setAttribute('cx', p.x.toFixed(1));
-      p.el.setAttribute('cy', p.y.toFixed(1));
-    }
-
-    for (let i = dust.length - 1; i >= 0; i--) {
-      const d = dust[i];
-      d.age += dt;
-      const k = d.age / d.life;
-      if (k >= 1) { d.el.remove(); dust.splice(i, 1); continue; }
-      d.x += d.vx * dt;
-      d.el.setAttribute('cx', d.x.toFixed(1));
-      d.el.setAttribute('cy', (d.y - k * 18).toFixed(1));
-      d.el.setAttribute('r', (3 + k * 10).toFixed(1));
-      d.el.setAttribute('opacity', ((1 - k) * 0.45).toFixed(2));
-    }
-  }
-
-  function clearParticles() {
-    for (const list of [grainPool, falling, dust]) {
-      list.forEach(p => p.el.remove());
-      list.length = 0;
-    }
-  }
-
-  // ---------- Camion ----------
-
-  const TRUCK_X = 526;       // arrière de la première benne, sous la sortie de la vis
-  let truckKey = '';
-  let truckParts = null;     // { piles: [{el, x, w}], label, end }
-  let sceneWidth = 800;
-
-  // Dessine le camion du modèle voulu : bennes (et remorques) puis cabine.
-  function buildTruck(model) {
-    const g = ui.truck;
-    g.innerHTML = '';
-    const piles = [];
-    let x = TRUCK_X;
-    model.beds.forEach((w, i) => {
-      if (i > 0) {
-        g.appendChild(svg('rect', { x: x - 14, y: 342, width: 14, height: 6, class: 'hitch' }));
-      }
-      const pile = svg('path', { class: 'pile', d: '' });
-      g.appendChild(pile);
-      piles.push({ el: pile, x, w });
-      g.appendChild(svg('path', { d: `M${x} 280 H${x + w} V334 H${x} Z`, class: 'bed' }));
-      g.appendChild(svg('rect', { x: x - 6, y: 334, width: w + 12, height: 26, class: 'chassis' }));
-      // Essieux : deux à l'arrière, un de plus à l'avant des longues remorques.
-      const axles = [x + 40, x + 94];
-      if (w >= 220) axles.push(x + w - 40);
-      axles.forEach(cx => g.appendChild(svg('circle', { cx, cy: 370, r: 20, class: 'wheel' })));
-      x += w + 14;
+  // Ce que la scène doit dessiner, recalculé à chaque image.
+  function sceneView() {
+    const units = state.sites.map((site, i) => {
+      const cap = siloVolume(site.levels.silo);
+      const tCap = truckCapacity(site.levels.camion);
+      const run = !!flowing[i];
+      const speed = run ? Math.min(260, 60 + 70 * screwVolume(site.levels.vis) * site.silo.flow) : 0;
+      return {
+        name: `Silo ${i + 1}`,
+        selected: i === state.selected,
+        auto: site.levels.auto > 0,
+        feeding: !!feeding[i],
+        matColor: material(site.material).color,
+        flowing: run,
+        screwSpeed: speed,
+        silo: { ratio: site.silo.vol / cap, color: site.silo.color, label: `${fmt(site.silo.vol)} / ${fmtV(cap)}` },
+        truck: {
+          ratio: site.truck.load / tCap, color: site.truck.color, label: `${fmt(site.truck.load)} / ${fmtT(tCap)}`,
+          model: truckModelOf(site.levels.camion), leaving: site.leaving, rotation: truckRotation(),
+        },
+      };
     });
-    // Cabine
-    const c = x - 4;
-    g.appendChild(svg('path', { d: `M${c} 292 H${c + 42} L${c + 64} 318 V360 H${c} Z`, class: 'cab' }));
-    g.appendChild(svg('path', { d: `M${c + 8} 298 H${c + 38} L${c + 54} 318 H${c + 8} Z`, class: 'window' }));
-    g.appendChild(svg('rect', { x: c - 6, y: 334, width: 76, height: 26, class: 'chassis' }));
-    g.appendChild(svg('circle', { cx: c + 32, cy: 370, r: 20, class: 'wheel' }));
-    const label = svg('text', { x: TRUCK_X + model.beds[0] / 2, y: 312, class: 'truck-label' });
-    g.appendChild(label);
-
-    const end = c + 70;
-    truckParts = { piles, label, end };
-    // La scène s'élargit pour que le véhicule entier reste visible.
-    sceneWidth = Math.max(800, end + 20);
-    ui.scene.setAttribute('viewBox', `0 0 ${sceneWidth} 440`);
-    ui.ground.setAttribute('width', sceneWidth);
-    ui.sceneLabel.setAttribute('x', sceneWidth - 20);
-    ui.truck.style.setProperty('--out', `${sceneWidth - TRUCK_X + 20}px`);
-    ui.truck.style.setProperty('--in', `${-end - 20}px`);
+    return { units, pad: padView() };
   }
 
-  // ---------- Rendu de la scène ----------
-
-  const SILO_TOP = 60, SILO_BOTTOM = 340;
-  let lastScrewDuration = -1;
-
-  function renderScene() {
-    const site = cur();
-    const on = !!flowing[state.selected];
-    const s = site.silo;
-    const cap = siloVolume();
-    const ratio = Math.min(s.vol / cap, 1);
-    const h = ratio * (SILO_BOTTOM - SILO_TOP);
-    ui.siloFill.setAttribute('y', SILO_BOTTOM - h);
-    ui.siloFill.setAttribute('height', h);
-    ui.siloFill.setAttribute('fill', s.color);
-    ui.siloLabel.textContent = `${fmt(s.vol)} / ${fmtV(cap)}`;
-    ui.prompt.classList.toggle('off', s.vol > 1e-6);
-
-    // Le camion est redessiné quand son modèle change.
-    const model = truckModelOf(lvl('camion'));
-    const key = `${state.selected}:${model.name}`;
-    if (key !== truckKey) {
-      truckKey = key;
-      buildTruck(model);
-      ui.truck.classList.remove('leaving');
+  // Emplacement du prochain silo, affiché dans l'image dès 3 camions livrés.
+  function padView() {
+    const n = state.sites.length;
+    if (n >= MAX_SITES || state.stats.trucks < 3) return null;
+    const unlocked = state.stats.trucks >= SITES_UNLOCK_TRUCKS;
+    const cost = siteCost(n);
+    if (!unlocked) {
+      return { title: `Silo ${n + 1}`, line: `${state.stats.trucks} / ${SITES_UNLOCK_TRUCKS} camions livrés`,
+        progress: state.stats.trucks / SITES_UNLOCK_TRUCKS, ready: false };
     }
-
-    // Tas dans chaque benne.
-    const t = site.truck;
-    const tCap = truckCapacity();
-    const tr = Math.min(t.load / tCap, 1);
-    const peak = 334 - tr * 70;
-    const shoulder = 334 - tr * 40;
-    truckParts.piles.forEach((p, i) => {
-      const px = i === 0 ? Math.min(OUTLET.x, p.x + p.w - 20) : p.x + p.w / 2;
-      p.el.setAttribute('d', `M${p.x + 4} 334 L${p.x + 4} ${shoulder} L${px} ${peak} L${p.x + p.w - 4} ${shoulder} L${p.x + p.w - 4} 334 Z`);
-      p.el.setAttribute('fill', t.color);
-    });
-    pileTop = peak;
-    truckParts.label.textContent = `${fmt(t.load)} / ${fmtT(tCap)}`;
-    truckParts.label.setAttribute('y', Math.min(312, peak - 8));
-    ui.sceneLabel.textContent = `Silo ${state.selected + 1}`;
-
-    ui.stream.classList.toggle('on', on);
-    ui.stream.setAttribute('y', OUTLET.y);
-    ui.stream.setAttribute('height', Math.max(0, pileTop - OUTLET.y));
-    ui.stream.setAttribute('fill', s.color);
-
-    // Vitesse de rotation de la vis proportionnelle au débit (bornée).
-    ui.flights.classList.toggle('running', on);
-    const duration = Math.max(0.12, Math.min(0.8, 0.35 / (screwVolume() * s.flow)));
-    if (Math.abs(duration - lastScrewDuration) > 0.01) {
-      ui.flights.style.animationDuration = `${duration}s`;
-      lastScrewDuration = duration;
-      // Les grains avancent plus vite que les spires pour rester lisibles.
-      screwSpeedPx = 3 * 32 / duration;
-    }
-    audio.setPouring(on);
-
-    // Conduite d'alimentation automatique au-dessus du silo.
-    ui.feed.hidden = autoRate() === 0;
-    ui.feedFlow.classList.toggle('on', !!feeding[state.selected]);
-    ui.feedFlow.setAttribute('stroke', material(site.material).color);
+    const ready = state.money >= cost;
+    return { title: `+ Construire le silo ${n + 1}`,
+      line: ready ? `${fmtE(cost)} · cliquez ici` : `${fmtE(cost)} · encore ${fmtE(cost - state.money)}`,
+      progress: ready ? null : state.money / cost, ready };
   }
+
+  let wasPouring = false;
+  function renderScene(dt) {
+    scene.draw(sceneView(), dt);
+    const pouring = flowing.some(Boolean);
+    if (pouring !== wasPouring) { audio.setPouring(pouring); wasPouring = pouring; }
+  }
+
+  // Clavier : flèches pour changer de silo, Entrée ou Espace pour verser un godet.
+  ui.scene.addEventListener('keydown', e => {
+    const n = state.sites.length;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); selectSite((state.selected + 1) % n); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); selectSite((state.selected + n - 1) % n); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pourBucket(state.selected); }
+  });
+  ui.buildBtn.addEventListener('click', buySite);
 
   // ---------- Rendu de l'interface ----------
 
@@ -769,11 +590,23 @@
     ui.autoStatus.textContent = autoRate() > 0 ? `· Alimentation auto : ${fmt(autoRate())} godet/s` : '';
   }
 
-  function itemButton(parent, onClick) {
+  // Pictogrammes des équipements (traits en currentColor).
+  const ICONS = {
+    godet: '<path d="M4 9h13l-2 8H6z"/><path d="M17 9l3-4"/><path d="M8 12h6"/>',
+    silo: '<path d="M7 7l5-3 5 3v9l-3 4h-4l-3-4z"/><path d="M7 11h10"/>',
+    vis: '<path d="M3 17L21 7"/><path d="M6 12c1 2 2 3 3 3M10 10c1 2 2 3 3 3M14 8c1 2 2 3 3 3"/>',
+    camion: '<path d="M2 7h12v9H2zM14 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+    auto: '<path d="M3 18L15 6"/><path d="M15 6h5v4"/><circle cx="7" cy="16" r="1.4"/><circle cx="11" cy="12" r="1.4"/>',
+    ligne: '<path d="M3 15h18"/><circle cx="6" cy="15" r="2.2"/><circle cx="18" cy="15" r="2.2"/><path d="M6 11h3v-3h6v3h3"/>',
+  };
+  const icon = id => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id]}</svg>`;
+
+  function itemButton(parent, onClick, iconId) {
     const li = document.createElement('li');
     li.innerHTML = `<button class="item" type="button">
-      <span class="name"></span><span class="level"></span>
-      <span class="effect"></span><span class="cost"></span></button>`;
+      <span class="ico">${icon(iconId)}</span>
+      <span class="txt"><span class="name"></span><span class="effect"></span></span>
+      <span class="side"><span class="level"></span><span class="cost"></span></span></button>`;
     const btn = li.firstElementChild;
     btn.addEventListener('click', onClick);
     parent.appendChild(li);
@@ -795,12 +628,12 @@
   };
 
   const equipRows = EQUIPMENT.map(eq => {
-    const r = itemButton(ui.equip, () => buyEquipment(eq));
+    const r = itemButton(ui.equip, () => buyEquipment(eq), eq.id);
     r.name.textContent = eq.name;
     return r;
   });
 
-  const lineRows = LINES.map(line => itemButton(ui.lines, () => buyLine(line)));
+  const lineRows = LINES.map(line => itemButton(ui.lines, () => buyLine(line), 'ligne'));
 
   const methodRows = METHODS.map(mt => {
     const btn = document.createElement('button');
@@ -861,9 +694,9 @@
       const l = lvl(eq.id);
       const maxed = l >= eq.maxLevel;
       const cost = equipCost(eq);
-      r.level.textContent = l;
+      r.level.textContent = `Niv. ${l}`;
       r.effect.textContent = maxed ? 'Niveau maximum atteint' : equipEffects[eq.id](l);
-      r.cost.textContent = maxed ? '—' : fmtE(cost);
+      r.cost.textContent = maxed ? 'Max.' : fmtE(cost);
       r.btn.classList.toggle('maxed', maxed);
       r.btn.disabled = maxed || state.money < cost;
     });
@@ -893,7 +726,7 @@
       const rate = line.rate * (has('coeng') ? 2 : 1);
       r.btn.classList.toggle('hidden-item', !known);
       r.name.textContent = known ? line.name : '???';
-      r.level.textContent = state.lines[line.id] || '';
+      r.level.textContent = state.lines[line.id] ? `× ${state.lines[line.id]}` : '';
       r.effect.textContent = known
         ? `+${fmtV(rate)}/s (≈ ${fmtE(rate * m.density * m.flow * m.price * salesMult())}/s en ${m.name.toLowerCase()})`
         : 'Continuez à livrer pour la découvrir…';
@@ -934,7 +767,7 @@
     ui.achCount.textContent = `${state.achievements.length} / ${ACHIEVEMENTS.length}`;
 
     renderLinesMaterial();
-    renderSites();
+    renderSceneBar();
     renderOrders();
     renderStats();
   }
@@ -959,69 +792,22 @@
     if (state.unlocked.includes(ui.linesMaterial.value)) state.linesMaterial = ui.linesMaterial.value;
   });
 
-  // Barre des silos : un bouton par silo, plus l'achat du suivant.
-  let sitesCount = -1;
-  let siteCards = [];
-  const buyCard = document.createElement('button');
-  buyCard.type = 'button';
-  buyCard.className = 'site site-buy';
-  buyCard.addEventListener('click', buySite);
-
-  function renderSites() {
-    if (sitesCount !== state.sites.length) {
-      sitesCount = state.sites.length;
-      ui.sites.innerHTML = '';
-      siteCards = state.sites.map((_, i) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'site';
-        btn.innerHTML = `<span class="site-head"><span>Silo ${i + 1}</span><span class="shown"></span></span>
-          <span class="site-mat"><span class="dot"></span><span class="mname"></span></span>
-          <span class="gauge"><div></div></span>
-          <span class="status"></span>`;
-        btn.addEventListener('click', () => selectSite(i));
-        ui.sites.appendChild(btn);
-        return { btn, dot: btn.querySelector('.dot'), name: btn.querySelector('.mname'),
-          gauge: btn.querySelector('.gauge div'), status: btn.querySelector('.status'), shown: btn.querySelector('.shown') };
-      });
-      ui.sites.appendChild(buyCard);
-    }
-
-    state.sites.forEach((site, i) => {
-      const c = siteCards[i];
-      const m = material(site.material);
-      c.btn.classList.toggle('selected', i === state.selected);
-      c.btn.setAttribute('aria-pressed', i === state.selected);
-      c.dot.style.background = m.color;
-      c.name.textContent = m.name;
-      c.shown.textContent = i === state.selected ? 'Affiché' : (site.levels.auto > 0 ? 'Auto' : '');
-      c.gauge.style.width = `${Math.min(100, (site.silo.vol / siloVolume(site.levels.silo)) * 100)}%`;
-      let status;
-      if (site.leaving > 0) status = 'Camion en livraison';
-      else if (flowing[i]) status = `Chargement ${fmt(site.truck.load)} / ${fmtT(truckCapacity(site.levels.camion))}`;
-      else status = 'Silo vide';
-      c.status.textContent = status;
-      c.status.classList.toggle('run', !!flowing[i]);
-    });
-
-    // La barre apparaît dès 3 camions, avec la progression vers le deuxième silo.
+  // Bouton de construction sous l'image (même action que l'emplacement dans la scène).
+  function renderSceneBar() {
     const n = state.sites.length;
     const unlocked = state.stats.trucks >= SITES_UNLOCK_TRUCKS;
-    ui.sites.hidden = n === 1 && state.stats.trucks < 3;
-    buyCard.hidden = n >= MAX_SITES;
-    if (n < MAX_SITES) {
-      buyCard.disabled = !unlocked || state.money < siteCost(n);
-      const affordable = unlocked && state.money >= siteCost(n);
-      buyCard.classList.toggle('ready', affordable);
-      const html = unlocked
-        ? `<strong>+ Construire le silo ${n + 1}</strong><span>${fmtE(siteCost(n))}</span>`
-        : `<strong>+ Silo ${n + 1}</strong><span>${state.stats.trucks} / ${SITES_UNLOCK_TRUCKS} camions livrés</span>`
-          + `<span class="gauge"><div style="width:${(state.stats.trucks / SITES_UNLOCK_TRUCKS) * 100}%"></div></span>`;
-      if (buyCard.dataset.html !== html) { buyCard.dataset.html = html; buyCard.innerHTML = html; }
+    ui.buildBtn.hidden = n >= MAX_SITES || !unlocked;
+    if (!ui.buildBtn.hidden) {
+      const cost = siteCost(n);
+      ui.buildBtn.textContent = `Construire le silo ${n + 1} · ${fmtE(cost)}`;
+      ui.buildBtn.disabled = state.money < cost;
     }
+    ui.sceneHint.textContent = n > 1
+      ? 'Cliquez sur un silo pour le sélectionner et y verser un godet. Flèches du clavier : changer de silo.'
+      : 'Cliquez sur le silo pour y verser un godet.';
     if (unlocked && !state.siteHintShown) {
       state.siteHintShown = true;
-      toast(`Vous pouvez construire un deuxième silo (${fmtE(siteCost(1))}) : voyez la carte en haut de la scène.`);
+      toast(`Vous pouvez construire un deuxième silo (${fmtE(siteCost(1))}) : cliquez sur l'emplacement dans l'image.`);
     }
   }
 
@@ -1057,11 +843,11 @@
           const li = document.createElement('li');
           li.className = 'offer';
           li.innerHTML = `<span class="client"></span>
-            <span><span class="swatch-inline"></span><span class="what"></span></span>
+            <span><span class="dot"></span><span class="what"></span></span>
             <span class="meta"></span>
             <button type="button" data-offer="${offer.id}">Accepter</button>`;
           li.querySelector('.client').textContent = offer.client;
-          li.querySelector('.swatch-inline').style.background = m.color;
+          li.querySelector('.dot').style.background = m.color;
           li.querySelector('.what').textContent = `${fmtT(offer.qty)} de ${m.name.toLowerCase()}`;
           li.querySelector('.meta').textContent =
             `Délai ${fmtDuration(offer.duration)} · Prime ${fmtE(offer.reward * orderMult())}`;
@@ -1098,8 +884,7 @@
     const dt = Math.min((now - last) / 1000, 1);
     last = now;
     step(dt);
-    stepParticles(dt);
-    renderScene();
+    renderScene(dt);
     slowTimer += dt;
     if (slowTimer > 0.1) {
       slowTimer = 0;
@@ -1110,13 +895,13 @@
   }
 
   applyOffline();
-  renderScene();
+  renderScene(0);
   renderShop();
   requestAnimationFrame(frame);
   setInterval(save, 5000);
   // Onglet en arrière-plan : la boucle s'arrête, on crédite les lignes au retour.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { save(); audio.setPouring(false); }
+    if (document.hidden) { save(); audio.setPouring(false); wasPouring = false; }
     else { applyOffline(); last = performance.now(); }
   });
   window.addEventListener('pagehide', save);
