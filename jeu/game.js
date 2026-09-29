@@ -15,9 +15,9 @@
   const SITES_UNLOCK_TRUCKS = 10;
   const siteCost = n => 1500 * Math.pow(15, n - 1); // prix du (n+1)e silo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const COMBO_MAX = 60;          // clics rapides pour atteindre la cadence ×5
+  const COMBO_MAX = 40;          // clics rapides pour atteindre la cadence ×5
   const GOLDEN_DURATION = 8;     // secondes pour attraper le camion doré
-  const FRENZY = { sales: 3, salesTime: 30, click: 5, clickTime: 20 };
+  const FRENZY = { sales: 5, salesTime: 30, click: 10, clickTime: 20 };
 
   // ---------- État ----------
 
@@ -162,10 +162,11 @@
 
   // ---------- Presse à injection ----------
   const combo = { heat: 0, last: -1e9 };
-  // Valeurs volontairement modestes : la presse complète la production sans la remplacer.
-  const partValue = (t = state.press.tier) => 0.5 * Math.pow(3, t); // 0,5 €, 1,5 €, 4,5 €… 1 094 €
-  const moldCount = (l = state.press.molds) => 1 + l;               // 1 à 9 pièces par clic
-  const incomeShare = (l = state.press.eng) => 0.002 * (1 + l);     // 0,2 % à 2,2 % du revenu auto
+  // Première version de l'atelier, avec un gain par clic divisé par 5.
+  const PRESS_DIVISOR = 5;
+  const partValue = (t = state.press.tier) => (5 * Math.pow(6, t)) / PRESS_DIVISOR; // 1 €, 6 €, 36 €…
+  const moldCount = (l = state.press.molds) => Math.pow(2, l);                      // 1 à 256 pièces
+  const incomeShare = (l = state.press.eng) => (0.03 + 0.03 * l) / PRESS_DIVISOR;   // 0,6 % à 6,6 % du revenu auto
   const comboMult = () => 1 + (combo.heat / COMBO_MAX) * 4;
   const pressUpCost = u => u.costBase * Math.pow(u.costGrowth, state.press[u.id]);
   // Gain d'un clic : la pièce moulée, plus une part du revenu automatique.
@@ -326,7 +327,7 @@
     audio.play('golden');
     const r = Math.random();
     if (r < 0.4) {
-      const lump = Math.max(100, autoIncome() * 45 + partValue() * moldCount() * bonusMult() * 20);
+      const lump = Math.max(250, autoIncome() * 60 + partValue() * moldCount() * bonusMult() * 30);
       earn(lump, 0);
       toast(`Camion doré : prime de ${fmtE(lump)} !`);
     } else if (r < 0.75) {
