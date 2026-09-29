@@ -8,7 +8,9 @@ par une vis d'Archimède dans un camion.
 - 30 matériaux avec prix, densité et écoulement propres.
 - Commandes clients à durée limitée, avec prime.
 - Jusqu'à 6 silos, chacun avec son matériau, sa vis, son camion et son
-  alimentation automatique.
+  alimentation automatique ; le camion s'allonge avec sa capacité
+  (porteur, semi-remorque, train routier, convoi exceptionnel).
+- Tout est accessible sur une seule page, sans onglets.
 - Équipements à niveaux et lignes de production passives.
 - Méthodes (QFD, Taguchi, TOC, éléments finis, TRIZ, co-engineering).
 - 24 succès (+2 % chacun) et prestige « Brevets INPI » (+5 % par brevet).
@@ -25,5 +27,6 @@ Ouvrir `jeu/index.html` dans un navigateur. Aucune installation n'est nécessair
 - `jeu/data.js` : données (matériaux, clients, équipements, lignes, méthodes, succès)
 - `jeu/audio.js` : sons générés avec la Web Audio API
 - `jeu/game.js` : règles du jeu, rendu, particules, sauvegarde
+- `jeu/img/logo-exventys.jpg` : logo repris du site exventys.com
 
 La progression est sauvegardée dans le navigateur du joueur (`localStorage`).

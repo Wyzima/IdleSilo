@@ -11,8 +11,8 @@
   const ORDER_REFRESH_SECONDS = 60;
   const PATENT_BASE = 1e5; // brevets = racine cubique (gains totaux / 100 000 €)
   const MAX_SITES = 6;
-  const SITES_UNLOCK_TRUCKS = 25;
-  const siteCost = n => 5000 * Math.pow(20, n - 1); // prix du (n+1)e silo
+  const SITES_UNLOCK_TRUCKS = 10;
+  const siteCost = n => 1500 * Math.pow(15, n - 1); // prix du (n+1)e silo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- État ----------
@@ -97,17 +97,26 @@
   const lvl = (id, site = cur()) => site.levels[id];
 
   // Caractéristiques d'un site selon ses niveaux (par défaut : le silo sélectionné).
-  const bucketVolume = (l = lvl('godet')) => 0.5 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
-  const siloVolume = (l = lvl('silo')) => 5 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
-  const screwVolume = (l = lvl('vis')) => 0.5 * Math.pow(1.35, l) * (has('taguchi') ? 1.5 : 1);
+  const bucketVolume = (l = lvl('godet')) => 1 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
+  const siloVolume = (l = lvl('silo')) => 8 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
+  const screwVolume = (l = lvl('vis')) => 1 * Math.pow(1.35, l) * (has('taguchi') ? 1.5 : 1);
   const truckCapacity = (l = lvl('camion')) => 10 * Math.pow(1.6, l);
   // Godets versés par seconde : 0,5 au niveau 1, puis +25 % par niveau.
-  const autoRate = (l = lvl('auto')) => (l > 0 ? 0.5 * Math.pow(1.25, l - 1) : 0);
-  const truckRotation = () => (has('toc') ? 1.5 : 3);
+  const autoRate = (l = lvl('auto')) => (l > 0 ? 0.6 * Math.pow(1.25, l - 1) : 0);
+  const truckRotation = () => (has('toc') ? 1 : 2);
 
   const screwDiameter = l => 200 + 50 * l; // mm, pour l'affichage
-  const TRUCK_MODELS = [[0, 'Camion benne'], [3, 'Porteur 8×4'], [6, 'Semi-remorque'], [10, 'Train routier'], [15, 'Convoi exceptionnel']];
-  const truckModel = l => TRUCK_MODELS.filter(([min]) => l >= min).pop()[1];
+  // Modèles de camion : plus la benne est grande, plus le véhicule s'allonge.
+  // beds = longueur de chaque benne ou remorque, de l'arrière vers la cabine.
+  const TRUCK_MODELS = [
+    { from: 0, name: 'Camion benne', beds: [180] },
+    { from: 3, name: 'Porteur 8×4', beds: [240] },
+    { from: 6, name: 'Semi-remorque', beds: [320] },
+    { from: 10, name: 'Train routier', beds: [220, 220] },
+    { from: 15, name: 'Convoi exceptionnel', beds: [220, 220, 240] },
+  ];
+  const truckModelOf = l => TRUCK_MODELS.filter(m => l >= m.from).pop();
+  const truckModel = l => truckModelOf(l).name;
 
   const equipCost = eq => eq.costBase * Math.pow(eq.costGrowth, lvl(eq.id));
   const lineCost = l => Math.ceil(l.cost * Math.pow(LINE_COST_GROWTH, state.lines[l.id]));
@@ -172,7 +181,7 @@
     money: $('money'), income: $('income'), trucks: $('trucks'), tonnage: $('tonnage'), sound: $('sound'),
     scene: $('scene'), silo: $('silo'), siloFill: $('silo-fill'), siloLabel: $('silo-label'),
     prompt: $('silo-prompt'), flights: $('flights'), grains: $('grains'), particles: $('particles'),
-    stream: $('stream'), truck: $('truck'), pile: $('pile'), truckLabel: $('truck-label'),
+    stream: $('stream'), truck: $('truck'), ground: $('ground'), sceneLabel: $('scene-label'),
     curMat: $('current-material'), curPrice: $('current-price'), screwRate: $('screw-rate'),
     bucket: $('bucket-size'), truckInfo: $('truck-info'), autoStatus: $('auto-status'),
     sites: $('sites'), feed: $('feed'), feedFlow: $('feed-flow'), equipTitle: $('equip-title'),
@@ -182,8 +191,9 @@
     orderProgress: $('order-progress'), orderReward: $('order-reward'), offers: $('order-offers'),
     methodsBlock: $('methods-block'), methods: $('methods-list'),
     equip: $('equip-list'), lines: $('lines-list'), materials: $('materials-list'),
+    materialTitle: $('material-title'), materialDetails: $('material-details'), unlockNext: $('unlock-next'),
     patents: $('patents'), patentBonus: $('patent-bonus'), prestige: $('prestige'),
-    achCount: $('ach-count'), achList: $('ach-list'),
+    achCount: $('ach-count'), achList: $('ach-list'), achDetail: $('ach-detail'),
     toast: $('toast'), reset: $('reset'),
     confirm: $('confirm'), confirmText: $('confirm-text'), confirmOk: $('confirm-ok'), confirmCancel: $('confirm-cancel'),
   };
@@ -251,17 +261,20 @@
     const cost = siteCost(n);
     if (n >= MAX_SITES || state.stats.trucks < SITES_UNLOCK_TRUCKS || state.money < cost) return;
     state.money -= cost;
-    state.sites.push(newSite(cur().material));
+    const site = newSite(cur().material);
+    site.levels.auto = 1; // un nouveau silo tourne tout seul dès sa construction
+    state.sites.push(site);
     audio.play('buy');
     selectSite(n);
-    toast(`Silo ${n + 1} construit ! Choisissez son matériau et équipez-le.`);
+    toast(`Silo ${n + 1} construit ! Il se remplit tout seul. Choisissez son matériau à droite.`);
+    toast('Cliquez sur les cartes en haut pour passer d\'un silo à l\'autre.');
   }
 
   function selectSite(i) {
     if (i === state.selected || !state.sites[i]) return;
     state.selected = i;
     clearParticles();
-    ui.truck.classList.remove('leaving');
+    truckKey = '';
   }
 
   function buyLine(line) {
@@ -347,14 +360,6 @@
     ui.sound.title = on ? 'Couper le son' : 'Activer le son';
   }
   renderSoundButton(audio.isEnabled());
-
-  // Onglets de la boutique
-  document.querySelectorAll('.tabs button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b === btn));
-      document.querySelectorAll('.panel').forEach(p => { p.hidden = p.dataset.panel !== btn.dataset.tab; });
-    });
-  });
 
   // Les notifications s'affichent l'une après l'autre.
   const toastQueue = [];
@@ -633,6 +638,54 @@
     }
   }
 
+  // ---------- Camion ----------
+
+  const TRUCK_X = 526;       // arrière de la première benne, sous la sortie de la vis
+  let truckKey = '';
+  let truckParts = null;     // { piles: [{el, x, w}], label, end }
+  let sceneWidth = 800;
+
+  // Dessine le camion du modèle voulu : bennes (et remorques) puis cabine.
+  function buildTruck(model) {
+    const g = ui.truck;
+    g.innerHTML = '';
+    const piles = [];
+    let x = TRUCK_X;
+    model.beds.forEach((w, i) => {
+      if (i > 0) {
+        g.appendChild(svg('rect', { x: x - 14, y: 342, width: 14, height: 6, class: 'hitch' }));
+      }
+      const pile = svg('path', { class: 'pile', d: '' });
+      g.appendChild(pile);
+      piles.push({ el: pile, x, w });
+      g.appendChild(svg('path', { d: `M${x} 280 H${x + w} V334 H${x} Z`, class: 'bed' }));
+      g.appendChild(svg('rect', { x: x - 6, y: 334, width: w + 12, height: 26, class: 'chassis' }));
+      // Essieux : deux à l'arrière, un de plus à l'avant des longues remorques.
+      const axles = [x + 40, x + 94];
+      if (w >= 220) axles.push(x + w - 40);
+      axles.forEach(cx => g.appendChild(svg('circle', { cx, cy: 370, r: 20, class: 'wheel' })));
+      x += w + 14;
+    });
+    // Cabine
+    const c = x - 4;
+    g.appendChild(svg('path', { d: `M${c} 292 H${c + 42} L${c + 64} 318 V360 H${c} Z`, class: 'cab' }));
+    g.appendChild(svg('path', { d: `M${c + 8} 298 H${c + 38} L${c + 54} 318 H${c + 8} Z`, class: 'window' }));
+    g.appendChild(svg('rect', { x: c - 6, y: 334, width: 76, height: 26, class: 'chassis' }));
+    g.appendChild(svg('circle', { cx: c + 32, cy: 370, r: 20, class: 'wheel' }));
+    const label = svg('text', { x: TRUCK_X + model.beds[0] / 2, y: 312, class: 'truck-label' });
+    g.appendChild(label);
+
+    const end = c + 70;
+    truckParts = { piles, label, end };
+    // La scène s'élargit pour que le véhicule entier reste visible.
+    sceneWidth = Math.max(800, end + 20);
+    ui.scene.setAttribute('viewBox', `0 0 ${sceneWidth} 440`);
+    ui.ground.setAttribute('width', sceneWidth);
+    ui.sceneLabel.setAttribute('x', sceneWidth - 20);
+    ui.truck.style.setProperty('--out', `${sceneWidth - TRUCK_X + 20}px`);
+    ui.truck.style.setProperty('--in', `${-end - 20}px`);
+  }
+
   // ---------- Rendu de la scène ----------
 
   const SILO_TOP = 60, SILO_BOTTOM = 340;
@@ -651,16 +704,30 @@
     ui.siloLabel.textContent = `${fmt(s.vol)} / ${fmtV(cap)}`;
     ui.prompt.classList.toggle('off', s.vol > 1e-6);
 
-    // Tas dans la benne.
+    // Le camion est redessiné quand son modèle change.
+    const model = truckModelOf(lvl('camion'));
+    const key = `${state.selected}:${model.name}`;
+    if (key !== truckKey) {
+      truckKey = key;
+      buildTruck(model);
+      ui.truck.classList.remove('leaving');
+    }
+
+    // Tas dans chaque benne.
     const t = site.truck;
     const tCap = truckCapacity();
     const tr = Math.min(t.load / tCap, 1);
-    pileTop = 334 - tr * 70;
+    const peak = 334 - tr * 70;
     const shoulder = 334 - tr * 40;
-    ui.pile.setAttribute('d', `M530 334 L530 ${shoulder} L631 ${pileTop} L702 ${shoulder} L702 334 Z`);
-    ui.pile.setAttribute('fill', t.color);
-    ui.truckLabel.textContent = `${fmt(t.load)} / ${fmtT(tCap)}`;
-    ui.truckLabel.setAttribute('y', Math.min(312, pileTop - 8));
+    truckParts.piles.forEach((p, i) => {
+      const px = i === 0 ? Math.min(OUTLET.x, p.x + p.w - 20) : p.x + p.w / 2;
+      p.el.setAttribute('d', `M${p.x + 4} 334 L${p.x + 4} ${shoulder} L${px} ${peak} L${p.x + p.w - 4} ${shoulder} L${p.x + p.w - 4} 334 Z`);
+      p.el.setAttribute('fill', t.color);
+    });
+    pileTop = peak;
+    truckParts.label.textContent = `${fmt(t.load)} / ${fmtT(tCap)}`;
+    truckParts.label.setAttribute('y', Math.min(312, peak - 8));
+    ui.sceneLabel.textContent = `Silo ${state.selected + 1}`;
 
     ui.stream.classList.toggle('on', on);
     ui.stream.setAttribute('y', OUTLET.y);
@@ -747,26 +814,37 @@
     return { btn, cost: btn.querySelector('small') };
   });
 
-  const matRows = MATERIALS.map(m => {
+  // Matériaux : une pastille par matériau débloqué, et un bouton pour le suivant.
+  const matChips = MATERIALS.map(m => {
     const li = document.createElement('li');
-    li.innerHTML = `<button class="mat" type="button">
-      <span class="swatch"></span><span class="mname"></span><span class="minfo"></span><span class="mstats"></span></button>`;
+    li.innerHTML = '<button class="chip" type="button"><span class="dot"></span><span></span></button>';
     const btn = li.firstElementChild;
-    btn.querySelector('.swatch').style.background = m.color;
-    btn.querySelector('.mname').textContent = m.name;
-    btn.querySelector('.mstats').textContent =
-      `${String(m.density).replace('.', ',')} t/m³ · écoulement ${fmtPct(m.flow)}`;
+    btn.querySelector('.dot').style.background = m.color;
+    btn.lastElementChild.textContent = m.name;
+    btn.title = `${m.name} · ${fmtE(m.price)}/t`;
     btn.addEventListener('click', () => selectMaterial(m));
     ui.materials.appendChild(li);
-    return { li, btn, info: btn.querySelector('.minfo') };
+    return { li, btn };
+  });
+  const nextMaterial = () => MATERIALS.find(m => !state.unlocked.includes(m.id));
+  ui.unlockNext.addEventListener('click', () => {
+    const m = nextMaterial();
+    if (m) selectMaterial(m);
   });
 
+  // Succès : une étoile par succès, le détail au survol ou au focus.
   const achRows = ACHIEVEMENTS.map(a => {
     const li = document.createElement('li');
     li.className = 'ach';
-    li.innerHTML = '<b></b><span></span>';
-    li.querySelector('b').textContent = a.name;
-    li.querySelector('span').textContent = a.desc;
+    li.tabIndex = 0;
+    li.textContent = '★';
+    const show = () => {
+      const done = state.achievements.includes(a.id);
+      ui.achDetail.textContent = `${done ? '★' : '☆'} ${a.name} : ${a.desc}${done ? ' (obtenu)' : ''}`;
+    };
+    li.addEventListener('mouseenter', show);
+    li.addEventListener('focus', show);
+    li.addEventListener('click', show);
     ui.achList.appendChild(li);
     return li;
   });
@@ -823,21 +901,26 @@
       r.btn.disabled = state.money < cost;
     });
 
-    // Matériaux débloqués + le suivant à débloquer.
-    let nextShown = false;
+    // Matériau du silo affiché.
+    const cm = curMaterial();
+    ui.materialTitle.textContent = `Matériau du silo ${state.selected + 1}`;
+    ui.materialDetails.innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = cm.name;
+    ui.materialDetails.append(strong,
+      ` · ${fmtE(cm.price)}/t · ${String(cm.density).replace('.', ',')} t/m³ · écoulement ${fmtPct(cm.flow)}`);
     MATERIALS.forEach((mat, i) => {
-      const r = matRows[i];
-      const unlocked = state.unlocked.includes(mat.id);
-      r.li.hidden = !unlocked && nextShown;
-      if (!unlocked) nextShown = true;
-      r.btn.classList.toggle('selected', mat.id === cur().material);
-      r.btn.classList.toggle('locked', !unlocked);
-      const usedBy = state.sites.map((site, n) => (site.material === mat.id ? n + 1 : 0)).filter(Boolean);
-      r.info.textContent = unlocked
-        ? `${fmtE(mat.price)}/t` + (usedBy.length ? ` · silo ${usedBy.join(', ')}` : '')
-        : `Débloquer : ${fmtE(mat.unlockCost)}`;
-      r.btn.disabled = !unlocked && state.money < mat.unlockCost;
+      const c = matChips[i];
+      c.li.hidden = !state.unlocked.includes(mat.id);
+      c.btn.classList.toggle('selected', mat.id === cm.id);
+      c.btn.setAttribute('aria-pressed', mat.id === cm.id);
     });
+    const next = nextMaterial();
+    ui.unlockNext.hidden = !next;
+    if (next) {
+      ui.unlockNext.textContent = `Débloquer ${next.name} (${fmtE(next.price)}/t) : ${fmtE(next.unlockCost)}`;
+      ui.unlockNext.disabled = state.money < next.unlockCost;
+    }
 
     // Progrès : brevets et succès.
     ui.patents.textContent = fmt(state.patents);
@@ -892,14 +975,14 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'site';
-        btn.innerHTML = `<span class="site-head"><span>Silo ${i + 1}</span><span class="lvl"></span></span>
+        btn.innerHTML = `<span class="site-head"><span>Silo ${i + 1}</span><span class="shown"></span></span>
           <span class="site-mat"><span class="dot"></span><span class="mname"></span></span>
           <span class="gauge"><div></div></span>
           <span class="status"></span>`;
         btn.addEventListener('click', () => selectSite(i));
         ui.sites.appendChild(btn);
         return { btn, dot: btn.querySelector('.dot'), name: btn.querySelector('.mname'),
-          gauge: btn.querySelector('.gauge div'), status: btn.querySelector('.status'), lvl: btn.querySelector('.lvl') };
+          gauge: btn.querySelector('.gauge div'), status: btn.querySelector('.status'), shown: btn.querySelector('.shown') };
       });
       ui.sites.appendChild(buyCard);
     }
@@ -911,7 +994,7 @@
       c.btn.setAttribute('aria-pressed', i === state.selected);
       c.dot.style.background = m.color;
       c.name.textContent = m.name;
-      c.lvl.textContent = site.levels.auto > 0 ? 'Auto' : '';
+      c.shown.textContent = i === state.selected ? 'Affiché' : (site.levels.auto > 0 ? 'Auto' : '');
       c.gauge.style.width = `${Math.min(100, (site.silo.vol / siloVolume(site.levels.silo)) * 100)}%`;
       let status;
       if (site.leaving > 0) status = 'Camion en livraison';
@@ -921,17 +1004,24 @@
       c.status.classList.toggle('run', !!flowing[i]);
     });
 
-    // Le premier silo seul n'a pas besoin de la barre tant qu'on ne peut pas en acheter.
+    // La barre apparaît dès 3 camions, avec la progression vers le deuxième silo.
     const n = state.sites.length;
     const unlocked = state.stats.trucks >= SITES_UNLOCK_TRUCKS;
-    ui.sites.hidden = n === 1 && !unlocked;
+    ui.sites.hidden = n === 1 && state.stats.trucks < 3;
     buyCard.hidden = n >= MAX_SITES;
     if (n < MAX_SITES) {
       buyCard.disabled = !unlocked || state.money < siteCost(n);
+      const affordable = unlocked && state.money >= siteCost(n);
+      buyCard.classList.toggle('ready', affordable);
       const html = unlocked
-        ? `<strong>+ Silo ${n + 1}</strong><span>${fmtE(siteCost(n))}</span>`
-        : `<strong>+ Silo ${n + 1}</strong><span>après ${SITES_UNLOCK_TRUCKS} camions livrés</span>`;
-      if (buyCard.innerHTML !== html) buyCard.innerHTML = html;
+        ? `<strong>+ Construire le silo ${n + 1}</strong><span>${fmtE(siteCost(n))}</span>`
+        : `<strong>+ Silo ${n + 1}</strong><span>${state.stats.trucks} / ${SITES_UNLOCK_TRUCKS} camions livrés</span>`
+          + `<span class="gauge"><div style="width:${(state.stats.trucks / SITES_UNLOCK_TRUCKS) * 100}%"></div></span>`;
+      if (buyCard.dataset.html !== html) { buyCard.dataset.html = html; buyCard.innerHTML = html; }
+    }
+    if (unlocked && !state.siteHintShown) {
+      state.siteHintShown = true;
+      toast(`Vous pouvez construire un deuxième silo (${fmtE(siteCost(1))}) : voyez la carte en haut de la scène.`);
     }
   }
 
