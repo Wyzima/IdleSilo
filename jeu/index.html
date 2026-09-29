@@ -41,6 +41,7 @@
             · <span id="truck-info">Camion benne 10 t</span>
             <span id="auto-status" class="auto-status"></span>
           </p>
+          <div id="buffs" class="buffs" aria-live="polite"></div>
           <button id="build-silo" class="build-btn" type="button" hidden></button>
         </div>
         <p id="scene-hint" class="scene-hint">Cliquez sur le silo pour y verser un godet.</p>
@@ -68,6 +69,11 @@
 
     <!-- Modificateurs : bande déroulante à droite -->
     <aside class="panel" aria-label="Améliorations">
+      <section class="card">
+        <h2>Atelier d'injection</h2>
+        <p class="muted small card-intro">Cliquez sur la presse dans l'image : chaque clic moule des pièces et rapporte de l'argent. Cliquez vite pour monter la cadence (jusqu'à ×5).</p>
+        <ul id="press-list" class="items"></ul>
+      </section>
       <section class="card">
         <h2 id="equip-title">Équipement du silo 1</h2>
         <ul id="equip-list" class="items"></ul>
@@ -99,6 +105,11 @@
         <h3>Succès <span id="ach-count" class="ach-count"></span></h3>
         <ul id="ach-list" class="achievements"></ul>
         <p id="ach-detail" class="muted small">Chaque succès donne +2 % sur les ventes. Survolez une étoile pour la voir.</p>
+      </section>
+      <section class="card">
+        <h2>Personnalisation</h2>
+        <p class="muted small card-intro">Achetée une fois, conservée pour toujours, même après un dépôt de brevets.</p>
+        <div id="skins" class="skin-groups"></div>
       </section>
       <button id="reset" class="reset" type="button">Recommencer la partie</button>
     </aside>

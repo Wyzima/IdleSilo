@@ -99,6 +99,16 @@ window.IdleSilo = window.IdleSilo || {};
       const t = ctx.currentTime;
       [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.1, 0.35, { gain: 0.15 }));
     },
+    // Presse : claquement du moule et petit souffle d'air.
+    press() {
+      const t = ctx.currentTime;
+      tone(80 + Math.random() * 15, t, 0.09, { type: 'square', gain: 0.08 });
+      noiseBurst(t + 0.02, 0.12, 4200, 0.07);
+    },
+    golden() {
+      const t = ctx.currentTime;
+      [880, 1175, 1480, 1760, 2349].forEach((f, i) => tone(f, t + i * 0.06, 0.3, { type: 'triangle', gain: 0.1 }));
+    },
     fail() {
       const t = ctx.currentTime;
       tone(300, t, 0.2, { type: 'sawtooth', gain: 0.06 });

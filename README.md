@@ -5,6 +5,11 @@ par une vis d'Archimède dans un camion.
 
 - Chaque clic sur le silo y verse un godet ; la vis remplit la benne, le camion
   part livrer quand elle est pleine.
+- Atelier d'injection : une presse à cliquer qui moule des pièces (8 gammes),
+  avec cadence jusqu'à ×5 quand on clique vite.
+- Camion doré à attraper : prime, frénésie de production ou clics d'or.
+- Personnalisation achetable : couleurs des camions, silos et vis, décor
+  (plein jour, coucher de soleil, hiver, nuit).
 - 30 matériaux avec prix, densité et écoulement propres.
 - Commandes clients à durée limitée, avec prime.
 - Jusqu'à 6 silos, chacun avec son matériau, sa vis, son camion et son

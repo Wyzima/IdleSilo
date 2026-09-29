@@ -1,7 +1,8 @@
 (() => {
   'use strict';
 
-  const { roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS, audio, createScene } = window.IdleSilo;
+  const { roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS,
+    PARTS, PRESS_UPGRADES, COSMETICS, audio, createScene } = window.IdleSilo;
 
   const SAVE_KEY = 'idle-silo-save-v3';
   const OFFLINE_CAP_SECONDS = 8 * 3600;
@@ -14,6 +15,9 @@
   const SITES_UNLOCK_TRUCKS = 10;
   const siteCost = n => 1500 * Math.pow(15, n - 1); // prix du (n+1)e silo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const COMBO_MAX = 40;          // clics rapides pour atteindre la cadence ×5
+  const GOLDEN_DURATION = 8;     // secondes pour attraper le camion doré
+  const FRENZY = { sales: 5, salesTime: 30, click: 10, clickTime: 20 };
 
   // ---------- État ----------
 
@@ -43,7 +47,16 @@
       lines: Object.fromEntries(LINES.map(l => [l.id, 0])),
       methods: [],
       orders: { offers: [], active: null, completed: 0, refresh: 0 },
+      press: { tier: 0, molds: 0, eng: 0 },
+      buffs: { frenzy: 0, clickFrenzy: 0 },
+      golden: { next: 45, active: null },
     };
+  }
+
+  // Personnalisations possédées et actives (conservées après un dépôt de brevets).
+  function freshCosmetics() {
+    const first = Object.fromEntries(Object.entries(COSMETICS).map(([cat, c]) => [cat, c.items[0].id]));
+    return { owned: Object.entries(first).map(([cat, id]) => `${cat}:${id}`), active: first };
   }
 
   function freshState() {
@@ -51,7 +64,8 @@
       ...freshRun(),
       patents: 0,
       achievements: [],
-      stats: { earned: 0, tons: 0, trucks: 0, clicks: 0, orders: 0 },
+      stats: { earned: 0, tons: 0, trucks: 0, clicks: 0, orders: 0, pressClicks: 0, golden: 0, maxCombo: 1 },
+      cosmetics: freshCosmetics(),
       lastSaved: Date.now(),
     };
   }
@@ -75,6 +89,12 @@
         lines: { ...base.lines, ...data.lines },
         stats: { ...base.stats, ...data.stats },
         orders: { ...base.orders, ...data.orders },
+        press: { ...base.press, ...data.press },
+        buffs: { ...base.buffs, ...data.buffs },
+        golden: { ...base.golden, ...data.golden, active: null },
+        cosmetics: data.cosmetics
+          ? { owned: data.cosmetics.owned, active: { ...base.cosmetics.active, ...data.cosmetics.active } }
+          : base.cosmetics,
       };
     } catch {
       return base;
@@ -121,8 +141,10 @@
   const equipCost = eq => eq.costBase * Math.pow(eq.costGrowth, lvl(eq.id));
   const lineCost = l => Math.ceil(l.cost * Math.pow(LINE_COST_GROWTH, state.lines[l.id]));
 
+  // Bonus permanents (brevets, succès) communs aux ventes et à la presse.
+  const bonusMult = () => (1 + 0.05 * state.patents) * (1 + 0.02 * state.achievements.length);
   const salesMult = () =>
-    (1 + 0.05 * state.patents) * (1 + 0.02 * state.achievements.length) * (has('triz') ? 1.5 : 1);
+    bonusMult() * (has('triz') ? 1.5 : 1) * (state.buffs.frenzy > 0 ? FRENZY.sales : 1);
   const orderMult = () => salesMult() * (has('qfd') ? 1.5 : 1);
 
   const passiveVolume = () =>
@@ -130,6 +152,26 @@
   const linesMaterial = () => material(state.linesMaterial);
   const passiveTons = (m = linesMaterial()) => passiveVolume() * m.density * m.flow;
   const passiveIncome = () => passiveTons() * linesMaterial().price * salesMult();
+
+  // Revenu automatique total : lignes + silos alimentés automatiquement.
+  function autoIncome() {
+    const sites = state.sites.reduce((sum, site) =>
+      sum + autoSiteTons(site) * material(site.material).price, 0) * salesMult();
+    return passiveIncome() + sites;
+  }
+
+  // ---------- Presse à injection ----------
+  const combo = { heat: 0, last: -1e9 };
+  const partValue = (t = state.press.tier) => 5 * Math.pow(6, t);
+  const moldCount = (l = state.press.molds) => Math.pow(2, l);
+  const incomeShare = (l = state.press.eng) => 0.03 + 0.03 * l;
+  const comboMult = () => 1 + (combo.heat / COMBO_MAX) * 4;
+  const pressUpCost = u => u.costBase * Math.pow(u.costGrowth, state.press[u.id]);
+  // Gain d'un clic : la pièce moulée, plus une part du revenu automatique.
+  function pressValue() {
+    const base = partValue() * moldCount() * bonusMult() + incomeShare() * autoIncome();
+    return base * comboMult() * (state.buffs.clickFrenzy > 0 ? FRENZY.click : 1);
+  }
 
   // Débit moyen (t/s) d'un silo alimenté automatiquement, rotations de camion comprises.
   function autoSiteTons(site) {
@@ -179,7 +221,8 @@
   const $ = id => document.getElementById(id);
   const ui = {
     money: $('money'), income: $('income'), trucks: $('trucks'), tonnage: $('tonnage'), sound: $('sound'),
-    scene: $('scene'), buildBtn: $('build-silo'), sceneHint: $('scene-hint'),
+    scene: $('scene'), buildBtn: $('build-silo'), sceneHint: $('scene-hint'), buffs: $('buffs'),
+    pressList: $('press-list'), skins: $('skins'),
     curMat: $('current-material'), curPrice: $('current-price'), screwRate: $('screw-rate'),
     bucket: $('bucket-size'), truckInfo: $('truck-info'), autoStatus: $('auto-status'),
     equipTitle: $('equip-title'),
@@ -261,6 +304,60 @@
     state.selected = i;
   }
 
+  function onPressClick() {
+    const value = pressValue();
+    earn(value, 0);
+    state.stats.pressClicks++;
+    combo.heat = Math.min(COMBO_MAX, combo.heat + 1);
+    combo.last = performance.now();
+    state.stats.maxCombo = Math.max(state.stats.maxCombo, comboMult());
+    audio.play('press');
+    scene.pressHit(`+${fmtE(value)}`, state.buffs.clickFrenzy > 0);
+  }
+
+  function catchGolden() {
+    const g = state.golden;
+    if (!g.active) return;
+    g.active = null;
+    g.next = rand(60, 150);
+    state.stats.golden++;
+    audio.play('golden');
+    const r = Math.random();
+    if (r < 0.4) {
+      const lump = Math.max(250, autoIncome() * 60 + partValue() * moldCount() * bonusMult() * 30);
+      earn(lump, 0);
+      toast(`Camion doré : prime de ${fmtE(lump)} !`);
+    } else if (r < 0.75) {
+      state.buffs.frenzy = FRENZY.salesTime;
+      toast(`Camion doré : frénésie de production, ventes ×${FRENZY.sales} pendant ${FRENZY.salesTime} s !`);
+    } else {
+      state.buffs.clickFrenzy = FRENZY.clickTime;
+      toast(`Camion doré : clics d'or, presse ×${FRENZY.click} pendant ${FRENZY.clickTime} s !`);
+    }
+  }
+
+  function buyPressUpgrade(u) {
+    const cost = pressUpCost(u);
+    if (state.press[u.id] >= u.maxLevel || state.money < cost) return;
+    state.money -= cost;
+    state.press[u.id]++;
+    audio.play('buy');
+    if (u.id === 'tier') toast(`Nouvelle pièce : ${PARTS[state.press.tier].name}`);
+  }
+
+  function chooseCosmetic(cat, item) {
+    const key = `${cat}:${item.id}`;
+    const c = state.cosmetics;
+    if (!c.owned.includes(key)) {
+      if (state.money < item.cost) return;
+      state.money -= item.cost;
+      c.owned.push(key);
+      audio.play('buy');
+      toast(`Personnalisation achetée : ${COSMETICS[cat].label} « ${item.name} »`);
+    }
+    c.active[cat] = item.id;
+  }
+
   function buyLine(line) {
     const cost = lineCost(line);
     if (state.money < cost) return;
@@ -297,6 +394,7 @@
       const g = patentsGain();
       if (g < 1) return;
       state = { ...state, ...freshRun(), patents: state.patents + g };
+      combo.heat = 0;
       scene.reset();
       audio.play('achievement');
       toast(`${g} brevet(s) déposé(s) ! Bonus permanent : +${fmt(state.patents * 5)} %`);
@@ -437,7 +535,28 @@
   const flowing = []; // la vis de chaque silo tourne-t-elle ?
   const feeding = []; // l'alimentation automatique de chaque silo verse-t-elle ?
 
+  function stepBonuses(dt) {
+    // La cadence retombe dès qu'on arrête de cliquer.
+    if (performance.now() - combo.last > 700) combo.heat = Math.max(0, combo.heat - 15 * dt);
+    const b = state.buffs;
+    const hadFrenzy = b.frenzy > 0, hadClick = b.clickFrenzy > 0;
+    b.frenzy = Math.max(0, b.frenzy - dt);
+    b.clickFrenzy = Math.max(0, b.clickFrenzy - dt);
+    if (hadFrenzy && b.frenzy === 0) toast('Fin de la frénésie de production.');
+    if (hadClick && b.clickFrenzy === 0) toast('Fin des clics d\'or.');
+    // Camion doré : il apparaît de temps en temps et traverse une vignette.
+    const g = state.golden;
+    if (!g.active) {
+      g.next -= dt;
+      if (g.next <= 0) g.active = { tile: Math.floor(Math.random() * (1 + state.sites.length)), t: 0 };
+    } else {
+      g.active.t += dt;
+      if (g.active.t >= GOLDEN_DURATION) { g.active = null; g.next = rand(60, 150); }
+    }
+  }
+
   function step(dt) {
+    stepBonuses(dt);
     // Lignes automatiques.
     const pt = passiveTons() * dt;
     if (pt > 0) {
@@ -513,6 +632,8 @@
   const scene = createScene(ui.scene, {
     onUnit: onUnitClick,
     onPad: buySite,
+    onPress: onPressClick,
+    onGolden: catchGolden,
   });
 
   // Ce que la scène doit dessiner, recalculé à chaque image.
@@ -537,7 +658,30 @@
         },
       };
     });
-    return { units, pad: padView() };
+    const part = PARTS[state.press.tier];
+    const g = state.golden.active;
+    return {
+      units,
+      pad: padView(),
+      theme: currentTheme(),
+      golden: g ? { tile: g.tile, p: g.t / GOLDEN_DURATION } : null,
+      press: {
+        partName: part.name, partColor: part.color, partShape: part.shape,
+        valueLabel: fmtE(pressValue()),
+        comboRatio: combo.heat / COMBO_MAX,
+        comboLabel: comboMult().toFixed(1).replace('.', ','),
+        idle: (performance.now() - combo.last) / 1000,
+        clickFrenzy: state.buffs.clickFrenzy > 0,
+      },
+    };
+  }
+
+  function currentTheme() {
+    const pick = cat => {
+      const items = COSMETICS[cat].items;
+      return (items.find(i => i.id === state.cosmetics.active[cat]) || items[0]);
+    };
+    return { bg: pick('bg').id, truck: pick('truck').c, silo: pick('silo').c, screw: pick('screw').c };
   }
 
   // Emplacement du prochain silo, affiché dans l'image dès 3 camions livrés.
@@ -563,12 +707,13 @@
     if (pouring !== wasPouring) { audio.setPouring(pouring); wasPouring = pouring; }
   }
 
-  // Clavier : flèches pour changer de silo, Entrée ou Espace pour verser un godet.
+  // Clavier : Espace pour la presse, flèches pour changer de silo, Entrée pour verser un godet.
   ui.scene.addEventListener('keydown', e => {
     const n = state.sites.length;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); selectSite((state.selected + 1) % n); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); selectSite((state.selected + n - 1) % n); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pourBucket(state.selected); }
+    else if (e.key === 'Enter') { e.preventDefault(); pourBucket(state.selected); }
+    else if (e.key === ' ') { e.preventDefault(); if (!e.repeat) onPressClick(); }
   });
   ui.buildBtn.addEventListener('click', buySite);
 
@@ -576,9 +721,8 @@
 
   function renderStats() {
     ui.money.textContent = fmtE(state.money);
-    const autoSites = state.sites.reduce((sum, site) =>
-      sum + autoSiteTons(site) * material(site.material).price, 0) * salesMult();
-    ui.income.textContent = `${fmtE(passiveIncome() + autoSites)}/s`;
+    ui.income.textContent = `${fmtE(autoIncome())}/s`;
+    renderBuffs();
     ui.trucks.textContent = fmt(state.stats.trucks);
     ui.tonnage.textContent = fmtT(state.stats.tons);
     const m = curMaterial();
@@ -597,6 +741,9 @@
     vis: '<path d="M3 17L21 7"/><path d="M6 12c1 2 2 3 3 3M10 10c1 2 2 3 3 3M14 8c1 2 2 3 3 3"/>',
     camion: '<path d="M2 7h12v9H2zM14 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
     auto: '<path d="M3 18L15 6"/><path d="M15 6h5v4"/><circle cx="7" cy="16" r="1.4"/><circle cx="11" cy="12" r="1.4"/>',
+    presse: '<path d="M3 20h18"/><path d="M5 20V9h6v11"/><path d="M11 13h8"/><path d="M15 5h4l-1 4h-2z"/>',
+    moule: '<rect x="4" y="6" width="7" height="12" rx="1"/><rect x="13" y="6" width="7" height="12" rx="1"/><circle cx="7.5" cy="12" r="1.5"/><circle cx="16.5" cy="12" r="1.5"/>',
+    ingenierie: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>',
     ligne: '<path d="M3 15h18"/><circle cx="6" cy="15" r="2.2"/><circle cx="18" cy="15" r="2.2"/><path d="M6 11h3v-3h6v3h3"/>',
   };
   const icon = id => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id]}</svg>`;
@@ -626,6 +773,68 @@
       ? `Remplit le silo sans cliquer : ${fmt(autoRate(1))} godet/s`
       : `${fmt(autoRate(l))} → ${fmt(autoRate(l + 1))} godet/s`),
   };
+
+  // Atelier d'injection
+  const PRESS_ICONS = { tier: 'presse', molds: 'moule', eng: 'ingenierie' };
+  const pressEffects = {
+    tier: l => `${PARTS[l + 1].name} : ${fmtE(partValue(l))} → ${fmtE(partValue(l + 1))} la pièce`,
+    molds: l => `${fmt(moldCount(l))} → ${fmt(moldCount(l + 1))} pièces par clic`,
+    eng: l => `${Math.round(incomeShare(l) * 100)} % → ${Math.round(incomeShare(l + 1) * 100)} % du revenu auto par clic`,
+  };
+  const pressRows = PRESS_UPGRADES.map(u => {
+    const r = itemButton(ui.pressList, () => buyPressUpgrade(u), PRESS_ICONS[u.id]);
+    r.name.textContent = u.name;
+    return r;
+  });
+
+  // Personnalisation : une rangée de pastilles par catégorie
+  const BG_SWATCH = { matin: '#f0dfb0', midi: '#8fc0ea', couchant: '#d9725a', hiver: '#e3ebf2', nuit: '#1b2a56' };
+  const skinRows = Object.entries(COSMETICS).map(([cat, def]) => {
+    const block = document.createElement('div');
+    block.className = 'skin-group';
+    block.innerHTML = '<span class="skin-label"></span><div class="skins"></div>';
+    block.querySelector('.skin-label').textContent = def.label;
+    const wrap = block.querySelector('.skins');
+    const buttons = def.items.map(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'skin';
+      btn.innerHTML = '<span class="swatch"></span><span class="skin-name"></span><span class="skin-cost"></span>';
+      const color = cat === 'bg' ? BG_SWATCH[item.id]
+        : cat === 'truck' ? item.c.cabTop : cat === 'silo' ? item.c.light : item.c.mid;
+      btn.querySelector('.swatch').style.background = color;
+      btn.querySelector('.skin-name').textContent = item.name;
+      btn.addEventListener('click', () => chooseCosmetic(cat, item));
+      wrap.appendChild(btn);
+      return { btn, item, cost: btn.querySelector('.skin-cost') };
+    });
+    ui.skins.appendChild(block);
+    return { cat, buttons };
+  });
+
+  function renderCosmetics() {
+    const c = state.cosmetics;
+    for (const row of skinRows) {
+      for (const b of row.buttons) {
+        const owned = c.owned.includes(`${row.cat}:${b.item.id}`);
+        const active = c.active[row.cat] === b.item.id;
+        b.btn.classList.toggle('active', active);
+        b.btn.setAttribute('aria-pressed', active);
+        b.cost.textContent = active ? 'Actif' : owned ? 'Choisir' : fmtE(b.item.cost);
+        b.btn.disabled = !owned && state.money < b.item.cost;
+      }
+    }
+  }
+
+  // Bonus actifs affichés sous la scène
+  function renderBuffs() {
+    const b = state.buffs;
+    const parts = [];
+    if (b.frenzy > 0) parts.push(`<span class="buff">Frénésie · ventes ×${FRENZY.sales} · ${Math.ceil(b.frenzy)} s</span>`);
+    if (b.clickFrenzy > 0) parts.push(`<span class="buff">Clics d'or · presse ×${FRENZY.click} · ${Math.ceil(b.clickFrenzy)} s</span>`);
+    const html = parts.join('');
+    if (ui.buffs.dataset.html !== html) { ui.buffs.dataset.html = html; ui.buffs.innerHTML = html; }
+  }
 
   const equipRows = EQUIPMENT.map(eq => {
     const r = itemButton(ui.equip, () => buyEquipment(eq), eq.id);
@@ -688,6 +897,18 @@
   });
 
   function renderShop() {
+    PRESS_UPGRADES.forEach((u, i) => {
+      const r = pressRows[i];
+      const l = state.press[u.id];
+      const maxed = l >= u.maxLevel;
+      const cost = pressUpCost(u);
+      r.level.textContent = `Niv. ${l}`;
+      r.effect.textContent = maxed ? 'Niveau maximum atteint' : pressEffects[u.id](l);
+      r.cost.textContent = maxed ? 'Max.' : fmtE(cost);
+      r.btn.classList.toggle('maxed', maxed);
+      r.btn.disabled = maxed || state.money < cost;
+    });
+    renderCosmetics();
     ui.equipTitle.textContent = `Équipement du silo ${state.selected + 1}`;
     EQUIPMENT.forEach((eq, i) => {
       const r = equipRows[i];
@@ -803,8 +1024,8 @@
       ui.buildBtn.disabled = state.money < cost;
     }
     ui.sceneHint.textContent = n > 1
-      ? 'Cliquez sur un silo pour le sélectionner et y verser un godet. Flèches du clavier : changer de silo.'
-      : 'Cliquez sur le silo pour y verser un godet.';
+      ? 'Cliquez sur la presse pour gagner de l\'argent, sur un silo pour le sélectionner et y verser un godet. Clavier : Espace (presse), flèches (silo), Entrée (godet).'
+      : 'Cliquez sur la presse pour gagner de l\'argent, et sur le silo pour y verser un godet. Clavier : Espace (presse), Entrée (godet).';
     if (unlocked && !state.siteHintShown) {
       state.siteHintShown = true;
       toast(`Vous pouvez construire un deuxième silo (${fmtE(siteCost(1))}) : cliquez sur l'emplacement dans l'image.`);
@@ -881,7 +1102,8 @@
   let last = performance.now();
   let slowTimer = 0;
   function frame(now) {
-    const dt = Math.min((now - last) / 1000, 1);
+    // Le premier horodatage de requestAnimationFrame peut précéder « last » : on borne à 0.
+    const dt = Math.max(0, Math.min((now - last) / 1000, 1));
     last = now;
     step(dt);
     renderScene(dt);

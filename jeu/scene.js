@@ -36,6 +36,27 @@ window.IdleSilo = window.IdleSilo || {};
     return `rgb(${f(r)},${f(g)},${f(b)})`;
   }
   const rand = (a, b) => a + Math.random() * (b - a);
+
+  // Ambiances du décor (personnalisation « Décor »)
+  const BACKDROPS = {
+    matin: { sky: ['#e9d7a8', '#f6ecd3', '#fbf6ea'], sun: '255,248,225', hills: '#d9d3c0', skyline: '#c9c3b2',
+      ground: ['#8e8a82', '#6f6b64'], curb: '#b9b3a6', pad: '#c8c2b5', road: 'rgba(240,226,180,.85)', cloud: 'rgba(255,255,255,.55)' },
+    midi: { sky: ['#6fa9e0', '#b3d4f0', '#e4f0f8'], sun: '255,255,255', hills: '#b5c7a3', skyline: '#a3adb8',
+      ground: ['#8b8984', '#6a6864'], curb: '#bdb9b0', pad: '#cfcac0', road: 'rgba(255,255,255,.85)', cloud: 'rgba(255,255,255,.85)' },
+    couchant: { sky: ['#4b3163', '#d9725a', '#f7c07a'], sun: '255,196,130', hills: '#8a5a5f', skyline: '#6a4658',
+      ground: ['#6d6260', '#4a4341'], curb: '#8f817b', pad: '#a7968c', road: 'rgba(255,214,160,.8)', cloud: 'rgba(255,190,160,.45)' },
+    hiver: { sky: ['#b9c9d8', '#dbe5ee', '#f3f6f9'], sun: '255,255,255', hills: '#f4f7fa', skyline: '#aeb9c4',
+      ground: ['#e9eef2', '#c7d0d8'], curb: '#ffffff', pad: '#dfe5ea', road: 'rgba(150,165,180,.6)', cloud: 'rgba(255,255,255,.75)', snow: true },
+    nuit: { sky: ['#0a1230', '#1b2a56', '#34406e'], sun: '220,230,255', hills: '#1c2640', skyline: '#121a30',
+      ground: ['#3b3b40', '#232327'], curb: '#55555c', pad: '#4a4a52', road: 'rgba(255,220,120,.7)', cloud: 'rgba(200,210,255,.10)', stars: true, lights: true },
+  };
+  // Couleurs par défaut (écrasées par les personnalisations achetées)
+  const DEFAULT_THEME = {
+    bg: 'matin',
+    truck: { bedTop: '#f1c555', bedBot: '#b8861a', rail: '#8a6412', cabTop: '#f3c650', cabBot: '#c99317', stripe: '#111111' },
+    silo: { light: '#eceae4', dark: '#8a8d91', roofLight: '#e6e4de', roofDark: '#6c7075', ring: '#7d8187' },
+    screw: { hi: '#c0303f', mid: '#8a1322', lo: '#4a0811', core: '#6d0d19' },
+  };
   const easeInOut = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
   function createScene(canvas, hooks) {
@@ -54,6 +75,7 @@ window.IdleSilo = window.IdleSilo || {};
     let bgKey = '';
     let time = 0;
     let lastView = null;
+    let T = DEFAULT_THEME;   // thème de couleurs en cours
     const units = [];        // état visuel de chaque silo (particules, phase de la vis…)
     const floaters = [];
 
@@ -113,7 +135,8 @@ window.IdleSilo = window.IdleSilo || {};
 
     // ---------- Fond (ciel, horizon industriel, sol) ----------
     function buildBackground(w, h, s) {
-      const key = `${w}x${h}@${dpr}`;
+      const B = BACKDROPS[T.bg] || BACKDROPS.matin;
+      const key = `${w}x${h}@${dpr}:${T.bg}`;
       if (key === bgKey) return;
       bgKey = key;
       bgCache = document.createElement('canvas');
@@ -123,22 +146,33 @@ window.IdleSilo = window.IdleSilo || {};
       g.scale(dpr, dpr);
       const groundY = h - GROUND * s;
 
-      // Ciel : lumière dorée du matin
+      // Ciel
       const sky = g.createLinearGradient(0, 0, 0, groundY);
-      sky.addColorStop(0, '#e9d7a8');
-      sky.addColorStop(0.55, '#f6ecd3');
-      sky.addColorStop(1, '#fbf6ea');
+      sky.addColorStop(0, B.sky[0]);
+      sky.addColorStop(0.55, B.sky[1]);
+      sky.addColorStop(1, B.sky[2]);
       g.fillStyle = sky;
       g.fillRect(0, 0, w, h);
-      // Soleil diffus
+      // Étoiles (tirage fixe pour que la vignette ne scintille pas)
+      if (B.stars) {
+        let seed = 7;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        g.fillStyle = 'rgba(255,255,255,.8)';
+        for (let k = 0; k < 70; k++) g.fillRect(rnd() * w, rnd() * groundY * 0.75, 1.4, 1.4);
+      }
+      // Soleil (ou lune) diffus
       const sun = g.createRadialGradient(w * 0.82, groundY * 0.3, 0, w * 0.82, groundY * 0.3, 90 * s + 40);
-      sun.addColorStop(0, 'rgba(255,248,225,.95)');
-      sun.addColorStop(1, 'rgba(255,248,225,0)');
+      sun.addColorStop(0, `rgba(${B.sun},.95)`);
+      sun.addColorStop(1, `rgba(${B.sun},0)`);
       g.fillStyle = sun;
       g.fillRect(0, 0, w, groundY);
+      if (B.stars) {
+        g.fillStyle = '#f4f1e0';
+        g.beginPath(); g.arc(w * 0.82, groundY * 0.3, 14 * s + 4, 0, Math.PI * 2); g.fill();
+      }
 
       // Collines lointaines
-      g.fillStyle = '#d9d3c0';
+      g.fillStyle = B.hills;
       g.beginPath();
       g.moveTo(0, groundY);
       for (let x = 0; x <= w; x += 20) {
@@ -148,7 +182,7 @@ window.IdleSilo = window.IdleSilo || {};
       g.fill();
 
       // Silhouettes d'usine : hangars, cheminées, silos lointains
-      g.fillStyle = '#c9c3b2';
+      g.fillStyle = B.skyline;
       const base = groundY - 20 * s;
       const shapes = [
         [0.46, 80, 34], [0.53, 50, 58], [0.60, 110, 26], [0.71, 26, 70], [0.75, 60, 40], [0.9, 90, 30],
@@ -156,11 +190,9 @@ window.IdleSilo = window.IdleSilo || {};
       for (const [fx, sw, sh] of shapes) {
         g.fillRect(w * fx, base - sh * s, sw * s, sh * s + 20 * s);
       }
-      // Cheminées
       for (const fx of [0.585, 0.64, 0.88]) {
         g.fillRect(w * fx, base - 110 * s, 9 * s, 110 * s);
       }
-      // Silos lointains (arrondis)
       for (const fx of [0.79, 0.815, 0.84]) {
         const x = w * fx;
         g.fillRect(x, base - 64 * s, 16 * s, 64 * s);
@@ -168,21 +200,33 @@ window.IdleSilo = window.IdleSilo || {};
         g.ellipse(x + 8 * s, base - 64 * s, 8 * s, 5 * s, 0, Math.PI, 0);
         g.fill();
       }
+      // Fenêtres éclairées la nuit
+      if (B.lights) {
+        g.fillStyle = 'rgba(255,214,120,.85)';
+        for (const [fx, sw, sh] of shapes) {
+          for (let k = 0; k < sw / 14; k++) g.fillRect(w * fx + (4 + k * 14) * s, base - sh * s + 8 * s, 5 * s, 4 * s);
+        }
+      }
+      // Neige sur les toits
+      if (B.snow) {
+        g.fillStyle = '#ffffff';
+        for (const [fx, sw, sh] of shapes) g.fillRect(w * fx - 2, base - sh * s - 3 * s, sw * s + 4, 4 * s);
+      }
 
       // Sol : enrobé, bordure, marquage
       const gr = g.createLinearGradient(0, groundY, 0, h);
-      gr.addColorStop(0, '#8e8a82');
-      gr.addColorStop(1, '#6f6b64');
+      gr.addColorStop(0, B.ground[0]);
+      gr.addColorStop(1, B.ground[1]);
       g.fillStyle = gr;
       g.fillRect(0, groundY, w, h - groundY);
-      g.fillStyle = '#b9b3a6';
+      g.fillStyle = B.curb;
       g.fillRect(0, groundY - 3 * s, w, 4 * s);
-      g.fillStyle = 'rgba(240,226,180,.85)';
+      g.fillStyle = B.road;
       for (let x = (TRUCK_X - 10) * s; x < w; x += 44 * s) {
         g.fillRect(x, groundY + 24 * s, 24 * s, 3 * s);
       }
       // Dalle béton sous le silo
-      g.fillStyle = '#c8c2b5';
+      g.fillStyle = B.pad;
       g.fillRect(4 * s, groundY - 2 * s, 158 * s, 12 * s);
       g.fillStyle = 'rgba(0,0,0,.08)';
       g.fillRect(4 * s, groundY + 8 * s, 158 * s, 2 * s);
@@ -296,12 +340,12 @@ window.IdleSilo = window.IdleSilo || {};
         ctx.beginPath(); ctx.moveTo(SILO.l, y); ctx.lineTo(SILO.r, y); ctx.stroke();
       }
       ctx.restore();
-      ctx.fillStyle = steelGradient(SILO.l - 4, SILO.l + 10);
+      ctx.fillStyle = steelGradient(SILO.l - 4, SILO.l + 10, T.silo.light, T.silo.dark);
       ctx.fillRect(SILO.l - 3, SILO.top, 10, SILO.coneTop - SILO.top);
-      ctx.fillStyle = steelGradient(SILO.r - 8, SILO.r + 4, '#d6d4ce', '#6d7075');
+      ctx.fillStyle = steelGradient(SILO.r - 8, SILO.r + 4, shade(T.silo.light, -0.1), shade(T.silo.dark, -0.2));
       ctx.fillRect(SILO.r - 7, SILO.top, 10, SILO.coneTop - SILO.top);
       // Cerclages
-      ctx.fillStyle = '#7d8187';
+      ctx.fillStyle = T.silo.ring;
       for (const y of [SILO.top + 40, SILO.top + 90, SILO.coneTop - 4]) ctx.fillRect(SILO.l - 3, y, SILO.r - SILO.l + 6, 4);
       // Contour de la trémie
       ctx.strokeStyle = selected ? '#e5b034' : '#4b4f55';
@@ -311,9 +355,9 @@ window.IdleSilo = window.IdleSilo || {};
 
       // Toit conique et évent
       const roof = ctx.createLinearGradient(SILO.l, 0, SILO.r, 0);
-      roof.addColorStop(0, '#9da1a6');
-      roof.addColorStop(0.3, '#e6e4de');
-      roof.addColorStop(1, '#6c7075');
+      roof.addColorStop(0, shade(T.silo.roofLight, -0.3));
+      roof.addColorStop(0.3, T.silo.roofLight);
+      roof.addColorStop(1, T.silo.roofDark);
       ctx.fillStyle = roof;
       ctx.beginPath();
       ctx.moveTo(SILO.l - 6, SILO.top + 2);
@@ -435,7 +479,7 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.save();
       ctx.beginPath(); ctx.rect(10, -20, SCREW_LEN - 14, 40); ctx.clip();
       // Tube central
-      ctx.fillStyle = '#6d0d19';
+      ctx.fillStyle = T.screw.core;
       ctx.fillRect(10, -6, SCREW_LEN, 12);
       // Grains transportés
       for (const g of fx.grains) {
@@ -449,7 +493,7 @@ window.IdleSilo = window.IdleSilo || {};
         ctx.translate(x, 0);
         ctx.rotate(-0.38);
         const fg = ctx.createLinearGradient(0, -16, 0, 16);
-        fg.addColorStop(0, '#c0303f'); fg.addColorStop(0.5, '#8a1322'); fg.addColorStop(1, '#4a0811');
+        fg.addColorStop(0, T.screw.hi); fg.addColorStop(0.5, T.screw.mid); fg.addColorStop(1, T.screw.lo);
         ctx.fillStyle = fg;
         ctx.beginPath(); ctx.ellipse(0, 0, 4.5, 16, 0, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(255,200,200,.35)';
@@ -537,15 +581,15 @@ window.IdleSilo = window.IdleSilo || {};
         } else if (i === 0) fx.pileTop = BED_TOP + 2;
         // Benne : panneau doré nervuré
         const bg = ctx.createLinearGradient(0, BED_TOP, 0, BED_BOTTOM);
-        bg.addColorStop(0, '#f1c555'); bg.addColorStop(1, '#b8861a');
+        bg.addColorStop(0, T.truck.bedTop); bg.addColorStop(1, T.truck.bedBot);
         ctx.fillStyle = bg;
         ctx.fillRect(x, BED_TOP, w, BED_BOTTOM - BED_TOP);
-        ctx.strokeStyle = 'rgba(90,60,5,.35)';
+        ctx.strokeStyle = 'rgba(0,0,0,.22)';
         ctx.lineWidth = 1.5;
         for (let rx = x + 16; rx < x + w - 6; rx += 18) {
           ctx.beginPath(); ctx.moveTo(rx, BED_TOP + 4); ctx.lineTo(rx, BED_BOTTOM - 3); ctx.stroke();
         }
-        ctx.fillStyle = '#8a6412';
+        ctx.fillStyle = T.truck.rail;
         ctx.fillRect(x - 2, BED_TOP - 3, w + 4, 5);
         // Logo Exventys sur une plaque blanche au flanc de la benne
         if (logoReady) {
@@ -571,7 +615,7 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.fillStyle = '#2b2d30';
       ctx.fillRect(c - 4, BED_BOTTOM, 62, 12);
       const cg = ctx.createLinearGradient(0, -104, 0, -30);
-      cg.addColorStop(0, '#f3c650'); cg.addColorStop(1, '#c99317');
+      cg.addColorStop(0, T.truck.cabTop); cg.addColorStop(1, T.truck.cabBot);
       ctx.fillStyle = cg;
       ctx.beginPath();
       ctx.moveTo(c, -30); ctx.lineTo(c, -100);
@@ -579,7 +623,7 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.lineTo(c + 56, -66); ctx.lineTo(c + 56, -30);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = '#8a6412'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = T.truck.rail; ctx.lineWidth = 1.5; ctx.stroke();
       // Pare-brise avec reflet
       const wg = ctx.createLinearGradient(c + 10, -94, c + 48, -70);
       wg.addColorStop(0, '#dff0f7'); wg.addColorStop(0.5, '#9cc6d8'); wg.addColorStop(1, '#6d9fb6');
@@ -587,8 +631,8 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.beginPath();
       ctx.moveTo(c + 8, -94); ctx.lineTo(c + 28, -94); ctx.lineTo(c + 46, -72); ctx.lineTo(c + 8, -72);
       ctx.closePath(); ctx.fill();
-      // Bande noire et phare
-      ctx.fillStyle = '#111';
+      // Bande et phare
+      ctx.fillStyle = T.truck.stripe;
       ctx.fillRect(c, -60, 56, 7);
       ctx.fillStyle = '#fff6c9';
       ctx.fillRect(c + 50, -48, 6, 6);
@@ -707,6 +751,246 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.restore();
     }
 
+    // ---------- Atelier d'injection (la « presse » à cliquer) ----------
+    const press = { anim: 9, flying: [], landed: 0, bump: 0 };
+
+    function drawPart(shape, color, x, y, r, rot = 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+      if (shape === 'ring') {
+        ctx.lineWidth = r * 0.45;
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === 'collet') {
+        roundRect(-r * 0.5, -r, r, r * 2, 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.35)';
+        ctx.fillRect(-1, -r, 2, r * 1.2);
+      } else if (shape === 'scale') {
+        ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === 'disc') {
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.4)';
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === 'profile') {
+        roundRect(-r * 1.2, -r * 0.4, r * 2.4, r * 0.8, r * 0.4); ctx.fill();
+      } else {
+        roundRect(-r * 0.8, -r * 0.8, r * 1.6, r * 1.6, 3); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPress(pv, dt) {
+      press.anim += dt;
+      // Fermeture du moule juste après le clic, puis ouverture
+      const t = press.anim;
+      let close = 0;
+      if (t < 0.08) close = t / 0.08;
+      else if (t < 0.16) close = 1;
+      else if (t < 0.3) close = 1 - (t - 0.16) / 0.14;
+
+      drawShadow(280, 520);
+      // Bâti
+      const cab = ctx.createLinearGradient(0, -82, 0, 0);
+      cab.addColorStop(0, '#454a51'); cab.addColorStop(1, '#202327');
+      ctx.fillStyle = cab;
+      roundRect(30, -82, 500, 82, 4); ctx.fill();
+      // Bande de signalisation
+      ctx.save();
+      roundRect(30, -64, 500, 10, 0); ctx.clip();
+      for (let x = 20; x < 540; x += 20) {
+        ctx.fillStyle = '#e5b034';
+        ctx.beginPath(); ctx.moveTo(x, -54); ctx.lineTo(x + 10, -64); ctx.lineTo(x + 20, -64); ctx.lineTo(x + 10, -54); ctx.fill();
+      }
+      ctx.restore();
+      // Pupitre de commande
+      ctx.fillStyle = '#2b2e33';
+      roundRect(440, -160, 70, 78, 4); ctx.fill();
+      ctx.fillStyle = pv.clickFrenzy ? '#ffe28a' : '#9fe0a8';
+      ctx.fillRect(448, -150, 54, 26);
+      ctx.fillStyle = '#c2283f';
+      ctx.beginPath(); ctx.arc(462, -106, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1f8f4a';
+      ctx.beginPath(); ctx.arc(486, -106, 6, 0, Math.PI * 2); ctx.fill();
+
+      // Unité de fermeture : vérin, colonnes, plateaux et moule
+      const cyl = ctx.createLinearGradient(0, -158, 0, -104);
+      cyl.addColorStop(0, '#c9cbcf'); cyl.addColorStop(0.5, '#f1f2f3'); cyl.addColorStop(1, '#7d8187');
+      ctx.fillStyle = cyl;
+      roundRect(40, -156, 80, 50, 6); ctx.fill();
+      ctx.strokeStyle = '#9ea2a7';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(110, -166); ctx.lineTo(330, -166);
+      ctx.moveTo(110, -96); ctx.lineTo(330, -96);
+      ctx.stroke();
+      const mx = 150 + close * 70;
+      ctx.fillStyle = '#5b5f65';
+      ctx.fillRect(120, -134, mx - 120, 8); // tige du vérin
+      ctx.fillStyle = '#3d4146';
+      ctx.fillRect(mx, -182, 20, 100);      // plateau mobile
+      ctx.fillRect(300, -182, 20, 100);     // plateau fixe
+      const mold = ctx.createLinearGradient(0, -170, 0, -94);
+      mold.addColorStop(0, '#f3c650'); mold.addColorStop(1, '#b8861a');
+      ctx.fillStyle = mold;
+      ctx.fillRect(mx + 20, -164, 30, 64);  // demi-moule mobile
+      ctx.fillRect(270, -164, 30, 64);      // demi-moule fixe
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.fillRect(268, -140, 4, 16);
+
+      // Unité d'injection : fourreau chauffé, moteur, trémie de granulés
+      const barrel = ctx.createLinearGradient(0, -142, 0, -116);
+      barrel.addColorStop(0, '#d9dadc'); barrel.addColorStop(1, '#6d7075');
+      ctx.fillStyle = barrel;
+      ctx.fillRect(320, -142, 170, 26);
+      ctx.fillStyle = '#c2552f';
+      for (let x = 340; x < 480; x += 30) ctx.fillRect(x, -144, 14, 30);
+      ctx.fillStyle = '#2f3237';
+      roundRect(488, -154, 44, 50, 4); ctx.fill();
+      ctx.fillStyle = '#9ea2a7';
+      ctx.beginPath();
+      ctx.moveTo(452, -222); ctx.lineTo(500, -222); ctx.lineTo(484, -168); ctx.lineTo(468, -168);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = pv.partColor;
+      ctx.beginPath();
+      ctx.moveTo(456, -210); ctx.lineTo(496, -210); ctx.lineTo(484, -172); ctx.lineTo(468, -172);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#5b5f65';
+      ctx.fillRect(472, -168, 8, 26);
+
+      // Bac de pièces
+      ctx.fillStyle = '#6d7075';
+      ctx.fillRect(590, -58, 130, 58);
+      ctx.fillStyle = '#8b8f94';
+      ctx.fillRect(586, -62, 138, 8);
+      const heap = Math.min(34, 6 + Math.log2(press.landed + 1) * 3.2);
+      ctx.fillStyle = pv.partColor;
+      ctx.beginPath();
+      ctx.moveTo(594, -60);
+      ctx.quadraticCurveTo(655, -60 - heap * 2, 716, -60);
+      ctx.closePath(); ctx.fill();
+
+      // Pièces éjectées vers le bac
+      for (let i = press.flying.length - 1; i >= 0; i--) {
+        const f = press.flying[i];
+        f.vy += 900 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += 8 * dt;
+        if (f.y > -62 && f.x > 590) { press.flying.splice(i, 1); press.landed++; continue; }
+        drawPart(pv.partShape, pv.partColor, f.x, f.y, 9, f.rot);
+      }
+
+      // Panneau d'information
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ctx.strokeStyle = 'rgba(0,0,0,.12)';
+      ctx.lineWidth = 1.5;
+      roundRect(560, -300, 260, 150, 8); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#111';
+      ctx.font = '600 24px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif';
+      ctx.fillText("ATELIER D'INJECTION", 576, -270);
+      drawPart(pv.partShape, pv.partColor, 588, -243, 8);
+      ctx.font = '500 15px Roboto, Arial, sans-serif';
+      ctx.fillStyle = '#32373c';
+      ctx.fillText(pv.partName, 604, -238);
+      ctx.font = '700 26px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif';
+      ctx.fillStyle = pv.clickFrenzy ? '#c2283f' : '#9a6d05';
+      ctx.fillText(`+${pv.valueLabel} / clic`, 576, -206);
+      // Jauge de cadence
+      ctx.fillStyle = '#ece8df';
+      roundRect(576, -188, 150, 14, 7); ctx.fill();
+      const cg = ctx.createLinearGradient(576, 0, 726, 0);
+      cg.addColorStop(0, '#e5b034'); cg.addColorStop(1, '#c2283f');
+      ctx.fillStyle = cg;
+      roundRect(576, -188, Math.max(14, 150 * pv.comboRatio), 14, 7); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.font = '600 22px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif';
+      ctx.fillText(`×${pv.comboLabel}`, 736, -174);
+      ctx.font = '500 12px Roboto, Arial, sans-serif';
+      ctx.fillStyle = '#6b6860';
+      ctx.fillText('CADENCE', 576, -160);
+
+      // Invitation à cliquer
+      if (pv.idle > 4) {
+        const k = reduced ? 1 : 1 + 0.06 * Math.sin(time * 6);
+        ctx.save();
+        ctx.translate(230, -225);
+        ctx.scale(k, k);
+        ctx.fillStyle = '#e5b034';
+        roundRect(-110, -18, 220, 36, 18); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.textAlign = 'center';
+        ctx.font = '700 17px Roboto, Arial, sans-serif';
+        ctx.fillText('Cliquez sur la presse !', 0, 6);
+        ctx.restore();
+      }
+      if (pv.clickFrenzy) {
+        ctx.strokeStyle = `rgba(229,176,52,${0.5 + 0.4 * Math.sin(time * 8)})`;
+        ctx.lineWidth = 6;
+        roundRect(24, -190, 516, 196, 8); ctx.stroke();
+      }
+    }
+
+    // ---------- Camion doré (bonus à attraper) ----------
+    function goldenX(p) { return -170 + p * (UW + 340); }
+
+    function drawGolden(gv) {
+      const x = goldenX(gv.p), y = 26;
+      ctx.save();
+      ctx.translate(x, y);
+      // Halo et rayons
+      const halo = ctx.createRadialGradient(0, -34, 5, 0, -34, 110);
+      halo.addColorStop(0, 'rgba(255,230,140,.75)');
+      halo.addColorStop(1, 'rgba(255,230,140,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(0, -34, 110, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,215,90,.6)';
+      ctx.lineWidth = 3;
+      for (let k = 0; k < 10; k++) {
+        const a = time * 1.5 + (k * Math.PI) / 5;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 60, -34 + Math.sin(a) * 60);
+        ctx.lineTo(Math.cos(a) * 90, -34 + Math.sin(a) * 90);
+        ctx.stroke();
+      }
+      // Fourgon doré
+      const body = ctx.createLinearGradient(0, -70, 0, -12);
+      body.addColorStop(0, '#fff1b0'); body.addColorStop(0.5, '#f0c23c'); body.addColorStop(1, '#a8780c');
+      ctx.fillStyle = body;
+      roundRect(-62, -68, 92, 54, 5); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(30, -60); ctx.lineTo(52, -60); ctx.lineTo(68, -36); ctx.lineTo(68, -14); ctx.lineTo(30, -14);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#bfe3f2';
+      ctx.beginPath(); ctx.moveTo(36, -55); ctx.lineTo(50, -55); ctx.lineTo(62, -37); ctx.lineTo(36, -37); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.font = '700 18px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('PRIME !', -16, -34);
+      for (const wx of [-38, 44]) {
+        ctx.fillStyle = '#1b1c1e';
+        ctx.beginPath(); ctx.arc(wx, -12, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f0c23c';
+        ctx.beginPath(); ctx.arc(wx, -12, 5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawFloaters(key) {
+      for (const f of floaters) {
+        if (f.unit !== key) continue;
+        const k = f.age / 1.1;
+        ctx.globalAlpha = 1 - k;
+        ctx.font = `700 ${f.big ? 30 : 22}px Roboto, Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#fff';
+        ctx.fillStyle = '#9a6d05';
+        ctx.strokeText(f.text, f.x, f.y - k * 50);
+        ctx.fillText(f.text, f.x, f.y - k * 50);
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // ---------- Vignettes ----------
     function drawTile(tile, index, view, dt) {
       const s = layout.s;
@@ -717,7 +1001,7 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.drawImage(bgCache, tile.x, tile.y, tile.w, tile.h);
 
       // Nuages qui dérivent lentement
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.fillStyle = (BACKDROPS[T.bg] || BACKDROPS.matin).cloud;
       for (let k = 0; k < 3; k++) {
         const cx = tile.x + ((time * (6 + k * 3) + k * 290 + index * 170) % (tile.w + 200)) - 100;
         const cy = tile.y + (24 + k * 22) * s + 8;
@@ -732,6 +1016,9 @@ window.IdleSilo = window.IdleSilo || {};
 
       if (tile.kind === 'pad') {
         drawPad(view.pad);
+      } else if (tile.kind === 'press') {
+        drawPress(view.press, dt);
+        drawFloaters('press');
       } else {
         const u = view.units[tile.index];
         const fx = unitFx(tile.index);
@@ -742,21 +1029,9 @@ window.IdleSilo = window.IdleSilo || {};
         drawScrew(u, fx);
         drawSilo(u, fx, u.selected);
         drawParticles(fx);
-        // Floaters de ce silo
-        for (const f of floaters) {
-          if (f.unit !== tile.index) continue;
-          const k = f.age / 1.1;
-          ctx.globalAlpha = 1 - k;
-          ctx.font = '700 22px Roboto, Arial, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.lineWidth = 5;
-          ctx.strokeStyle = '#fff';
-          ctx.fillStyle = '#9a6d05';
-          ctx.strokeText(f.text, f.x, f.y - k * 50);
-          ctx.fillText(f.text, f.x, f.y - k * 50);
-          ctx.globalAlpha = 1;
-        }
+        drawFloaters(tile.index);
       }
+      if (view.golden && view.golden.tile === index) drawGolden(view.golden);
       ctx.restore();
 
       // Cadre : doré pour le silo sélectionné
@@ -782,11 +1057,15 @@ window.IdleSilo = window.IdleSilo || {};
     function draw(view, dt) {
       lastView = view;
       time += dt;
-      const cells = view.units.length + (view.pad ? 1 : 0);
+      T = view.theme || DEFAULT_THEME;
+      // Vignettes : l'atelier d'injection, puis les silos, puis l'emplacement libre
+      const cells = 1 + view.units.length + (view.pad ? 1 : 0);
       relayout(cells, false);
       buildBackground(layout.tw, layout.th, layout.s);
       tiles.forEach((t, i) => {
-        if (i < view.units.length) { t.kind = 'unit'; t.index = i; } else { t.kind = 'pad'; t.index = -1; }
+        if (i === 0) { t.kind = 'press'; t.index = -1; }
+        else if (i - 1 < view.units.length) { t.kind = 'unit'; t.index = i - 1; }
+        else { t.kind = 'pad'; t.index = -1; }
       });
       for (let i = floaters.length - 1; i >= 0; i--) {
         floaters[i].age += dt;
@@ -816,8 +1095,15 @@ window.IdleSilo = window.IdleSilo || {};
     canvas.addEventListener('click', e => {
       const tile = hitTile(e);
       if (!tile) return;
-      if (tile.kind === 'pad') { hooks.onPad(); return; }
       const p = localPoint(e, tile);
+      // Le camion doré passe avant tout le reste
+      const gv = lastView && lastView.golden;
+      if (gv && tiles[gv.tile] === tile) {
+        const gx = goldenX(gv.p);
+        if (Math.abs(p.x - (gx + 3)) < 100 && p.y > -120 && p.y < 50) { hooks.onGolden(); return; }
+      }
+      if (tile.kind === 'pad') { hooks.onPad(); return; }
+      if (tile.kind === 'press') { hooks.onPress(p); return; }
       hooks.onUnit(tile.index, onSilo(p), p);
     });
     canvas.addEventListener('mousemove', e => {
@@ -835,11 +1121,17 @@ window.IdleSilo = window.IdleSilo || {};
     return {
       draw,
       bump(i) { unitFx(i).bump = 0.18; },
+      // Clic sur la presse : le moule se ferme et une pièce est éjectée vers le bac.
+      pressHit(text, big) {
+        press.anim = 0;
+        if (press.flying.length < 25) press.flying.push({ x: 262, y: -128, vx: rand(260, 380), vy: rand(-380, -260), rot: 0 });
+        floaters.push({ unit: 'press', text, age: 0, x: 260 + rand(-30, 30), y: -200, big });
+      },
       floater(i, where, text) {
         const pos = where === 'truck' ? { x: TRUCK_X + 90, y: -130 } : { x: 80, y: -200 };
         floaters.push({ unit: i, text, age: 0, ...pos });
       },
-      reset() { units.length = 0; floaters.length = 0; },
+      reset() { units.length = 0; floaters.length = 0; press.landed = 0; press.flying.length = 0; },
     };
   }
 

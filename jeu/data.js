@@ -129,9 +129,82 @@ window.IdleSilo = window.IdleSilo || {};
     { id: 'methods', name: 'Boîte à outils complète', desc: 'Acquérir toutes les méthodes', test: s => s.methods.length >= METHODS.length },
     { id: 'patent1', name: 'Inventeur', desc: 'Déposer un premier brevet', test: s => s.patents >= 1 },
     { id: 'patent25', name: 'Talent INPI', desc: 'Détenir 25 brevets', test: s => s.patents >= 25 },
+    { id: 'press100', name: 'Première série', desc: 'Mouler 100 pièces', test: s => s.stats.pressClicks >= 100 },
+    { id: 'press1000', name: 'Production de masse', desc: 'Mouler 1 000 pièces', test: s => s.stats.pressClicks >= 1000 },
+    { id: 'press10k', name: 'Cadence industrielle', desc: 'Mouler 10 000 pièces', test: s => s.stats.pressClicks >= 1e4 },
+    { id: 'combo5', name: 'Pleine cadence', desc: 'Atteindre la cadence ×5', test: s => s.stats.maxCombo >= 5 },
+    { id: 'golden1', name: 'Livraison en or', desc: 'Attraper un camion doré', test: s => s.stats.golden >= 1 },
+    { id: 'golden25', name: 'Chasseur de primes', desc: 'Attraper 25 camions dorés', test: s => s.stats.golden >= 25 },
+    { id: 'style', name: 'Image de marque', desc: 'Acheter une personnalisation', test: s => s.cosmetics.owned.length > 4 },
   ];
+
+  // Presse à injection : les pièces moulées, de la plus simple à la plus chère.
+  // Inspirées des réalisations présentées sur exventys.com.
+  const PARTS = [
+    { name: 'Joint torique', color: '#1f1f1f', shape: 'ring' },
+    { name: 'Pince de serrage', color: '#9aa1a8', shape: 'collet' },
+    { name: 'Écaille élastomère', color: '#2f6b33', shape: 'scale' },
+    { name: 'Support de disque abrasif', color: '#e5b034', shape: 'disc' },
+    { name: 'Joint de baie ferroviaire', color: '#3a3d42', shape: 'profile' },
+    { name: 'Pièce en polyéthylène', color: '#6fa8dc', shape: 'box' },
+    { name: 'Raccord de fond vibrant', color: '#8a1322', shape: 'ring' },
+    { name: 'Spire Archimedys™', color: '#b3202f', shape: 'scale' },
+  ];
+
+  // Améliorations de l'atelier (achats à niveaux).
+  const PRESS_UPGRADES = [
+    { id: 'tier', name: 'Gamme de pièces', maxLevel: PARTS.length - 1, costBase: 150, costGrowth: 15 },
+    { id: 'molds', name: 'Moule multi-empreintes', maxLevel: 8, costBase: 400, costGrowth: 9 },
+    { id: 'eng', name: 'Ingénierie de production', maxLevel: 10, costBase: 2000, costGrowth: 7 },
+  ];
+
+  // Personnalisations : achetées une fois, conservées après un dépôt de brevets.
+  const COSMETICS = {
+    truck: {
+      label: 'Camions',
+      items: [
+        { id: 'or', name: 'Or Exventys', cost: 0, c: { bedTop: '#f1c555', bedBot: '#b8861a', rail: '#8a6412', cabTop: '#f3c650', cabBot: '#c99317', stripe: '#111111' } },
+        { id: 'rouge', name: 'Rouge', cost: 2000, c: { bedTop: '#e0454f', bedBot: '#9e1b27', rail: '#6d0d15', cabTop: '#e4505a', cabBot: '#a31d29', stripe: '#ffffff' } },
+        { id: 'bleu', name: 'Bleu', cost: 2000, c: { bedTop: '#4f8fd6', bedBot: '#1f4f8a', rail: '#153659', cabTop: '#5a9be0', cabBot: '#23558f', stripe: '#ffffff' } },
+        { id: 'vert', name: 'Vert', cost: 25000, c: { bedTop: '#5fae63', bedBot: '#2e6b35', rail: '#1d4a22', cabTop: '#66b86a', cabBot: '#316f38', stripe: '#f4d35e' } },
+        { id: 'noir', name: 'Noir mat', cost: 250000, c: { bedTop: '#3a3d42', bedBot: '#16181b', rail: '#000000', cabTop: '#44474d', cabBot: '#1b1d20', stripe: '#e5b034' } },
+        { id: 'chrome', name: 'Chrome', cost: 5e6, c: { bedTop: '#f7f8f9', bedBot: '#8f969d', rail: '#5f656b', cabTop: '#ffffff', cabBot: '#9aa1a8', stripe: '#e5b034' } },
+      ],
+    },
+    silo: {
+      label: 'Silos',
+      items: [
+        { id: 'galva', name: 'Acier galvanisé', cost: 0, c: { light: '#eceae4', dark: '#8a8d91', roofLight: '#e6e4de', roofDark: '#6c7075', ring: '#7d8187' } },
+        { id: 'blanc', name: 'Blanc', cost: 3000, c: { light: '#ffffff', dark: '#b3b7bc', roofLight: '#ffffff', roofDark: '#9da1a6', ring: '#c4c8cc' } },
+        { id: 'rouge', name: 'Rouge', cost: 30000, c: { light: '#e8737b', dark: '#8d1822', roofLight: '#ef8b92', roofDark: '#8d1822', ring: '#6d0d15' } },
+        { id: 'vert', name: 'Vert agricole', cost: 30000, c: { light: '#8fca8a', dark: '#2f6b33', roofLight: '#9fd49a', roofDark: '#2f6b33', ring: '#24542a' } },
+        { id: 'bleu', name: 'Bleu', cost: 300000, c: { light: '#8fbbe9', dark: '#23558f', roofLight: '#9cc4ee', roofDark: '#23558f', ring: '#1b4270' } },
+        { id: 'or', name: 'Or', cost: 1e7, c: { light: '#f6dc8e', dark: '#a77a12', roofLight: '#f9e4a6', roofDark: '#a77a12', ring: '#8a6412' } },
+      ],
+    },
+    screw: {
+      label: 'Vis',
+      items: [
+        { id: 'rouge', name: 'Rouge', cost: 0, c: { hi: '#c0303f', mid: '#8a1322', lo: '#4a0811', core: '#6d0d19' } },
+        { id: 'jaune', name: 'Jaune', cost: 5000, c: { hi: '#f2cc5a', mid: '#c9971c', lo: '#7a5a0a', core: '#9c7414' } },
+        { id: 'bleu', name: 'Bleu', cost: 50000, c: { hi: '#6aa5e6', mid: '#2a5d9c', lo: '#163459', core: '#1f4a7c' } },
+        { id: 'inox', name: 'Inox', cost: 500000, c: { hi: '#f7f8f9', mid: '#aab0b6', lo: '#6b7178', core: '#8d9399' } },
+      ],
+    },
+    bg: {
+      label: 'Décor',
+      items: [
+        { id: 'matin', name: 'Matin doré', cost: 0 },
+        { id: 'midi', name: 'Plein jour', cost: 10000 },
+        { id: 'couchant', name: 'Coucher de soleil', cost: 150000 },
+        { id: 'hiver', name: 'Hiver', cost: 1.5e6 },
+        { id: 'nuit', name: 'Nuit', cost: 2e7 },
+      ],
+    },
+  };
 
   Object.assign(window.IdleSilo, {
     roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS,
+    PARTS, PRESS_UPGRADES, COSMETICS,
   });
 })();

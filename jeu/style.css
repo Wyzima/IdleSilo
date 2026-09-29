@@ -352,6 +352,42 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 
+/* ---------- Atelier, bonus et personnalisation ---------- */
+.card-intro { margin: -4px 0 10px; }
+.buffs { display: flex; flex-wrap: wrap; gap: 6px; }
+.buff {
+  background: var(--black);
+  color: var(--gold);
+  border-radius: 3px;
+  padding: 3px 10px;
+  font: 600 .95rem var(--font-sign);
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+}
+.skin-groups { display: grid; gap: 12px; }
+.skin-label { display: block; margin-bottom: 5px; font: 600 .85rem var(--font-sign); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.skin {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.skin:hover:not(:disabled) { border-color: var(--gold); }
+.skin:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: 2px; }
+.skin:disabled { cursor: not-allowed; opacity: .55; }
+.skin .swatch { width: 100%; height: 14px; border-radius: 2px; border: 1px solid rgba(0, 0, 0, .2); }
+.skin-name { font-size: .76rem; font-weight: 500; color: var(--ink); }
+.skin-cost { font: 600 .85rem var(--font-sign); color: var(--gold-deep); }
+.skin.active { border: 2px solid var(--black); }
+.skin.active .skin-cost { color: var(--ok); }
+
 /* ---------- Notifications et confirmation ---------- */
 .toast {
   position: fixed;
