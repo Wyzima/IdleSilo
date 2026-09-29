@@ -42,6 +42,12 @@ window.IdleSilo = window.IdleSilo || {};
     const ctx = canvas.getContext('2d');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let dpr = 1, cssW = 0, cssH = 0;
+    let availW = 0, availH = 0;
+    // Logo Exventys pour les bennes (le fichier a une marge blanche en bas).
+    const logo = new Image();
+    let logoReady = false;
+    logo.onload = () => { logoReady = true; };
+    logo.src = 'img/logo-exventys.jpg';
     let layout = { cols: 1, tw: 0, th: 0, s: 1, cells: 0 };
     let tiles = [];          // [{x, y, w, h, kind: 'unit'|'pad', index}]
     let bgCache = null;      // fond d'une vignette, mis en cache
@@ -64,20 +70,34 @@ window.IdleSilo = window.IdleSilo || {};
 
     // ---------- Mise en page ----------
     function resize() {
-      const rect = canvas.parentElement.getBoundingClientRect();
-      cssW = Math.max(280, Math.floor(rect.width));
+      const parent = canvas.parentElement;
+      const rect = parent.getBoundingClientRect();
+      availW = Math.max(240, Math.floor(rect.width));
+      // Sur mobile, le cadre prend la hauteur du dessin, dans la limite de son max-height.
+      const maxH = parseFloat(getComputedStyle(parent).maxHeight);
+      availH = Math.max(120, Math.floor(Number.isFinite(maxH) ? maxH : rect.height));
       relayout(layout.cells || 1, true);
     }
 
+    // Choisit le nombre de colonnes qui donne les plus grandes vignettes
+    // tout en faisant tenir toute la scène dans l'espace disponible.
     function relayout(cells, force) {
       if (!force && cells === layout.cells) return;
-      let cols = 1;
-      if (cssW >= 640 && cells > 1) cols = cells <= 4 ? 2 : 3;
-      const tw = (cssW - GAP * (cols - 1)) / cols;
-      const s = Math.min(1.15, tw / UW);
-      const th = Math.round(UH * s);
-      const rows = Math.ceil(cells / cols);
+      let best = null;
+      for (let cols = 1; cols <= cells; cols++) {
+        const rows = Math.ceil(cells / cols);
+        const tw = (availW - GAP * (cols - 1)) / cols;
+        const th = (availH - GAP * (rows - 1)) / rows;
+        const s = Math.min(1.15, tw / (UW + 28), th / UH);
+        if (!best || s > best.s + 1e-6) best = { cols, rows, s };
+      }
+      const { cols, rows, s } = best;
+      // Vignettes un peu plus larges que le dessin, sans dépasser la place.
+      const tw = Math.min((availW - GAP * (cols - 1)) / cols, (UW + 28) * s * 1.35);
+      const th = Math.floor(UH * s);
+      cssW = Math.floor(cols * tw + GAP * (cols - 1));
       cssH = rows * th + GAP * (rows - 1);
+      canvas.style.width = `${cssW}px`;
       layout = { cols, tw, th, s, cells };
       dpr = Math.min(2, window.devicePixelRatio || 1);
       canvas.width = Math.round(cssW * dpr);
@@ -527,6 +547,15 @@ window.IdleSilo = window.IdleSilo || {};
         }
         ctx.fillStyle = '#8a6412';
         ctx.fillRect(x - 2, BED_TOP - 3, w + 4, 5);
+        // Logo Exventys sur une plaque blanche au flanc de la benne
+        if (logoReady) {
+          const lw = Math.min(78, w - 24), lh = lw * 235 / 1020;
+          const lx = x + (w - lw) / 2, ly = BED_TOP + (BED_BOTTOM - BED_TOP - lh) / 2 - 1;
+          ctx.fillStyle = '#fff';
+          roundRect(lx - 4, ly - 3, lw + 8, lh + 6, 2);
+          ctx.fill();
+          ctx.drawImage(logo, 0, 0, 1020, 235, lx, ly, lw, lh);
+        }
         // Garde-boue et roues
         const axles = w >= 150 ? [x + 28, x + 62, x + w - 30] : [x + 28, x + 62];
         for (const ax of axles) {
@@ -576,9 +605,10 @@ window.IdleSilo = window.IdleSilo || {};
         ctx.lineWidth = 4;
         ctx.strokeStyle = 'rgba(255,255,255,.9)';
         ctx.fillStyle = '#1e2124';
-        const lx = TRUCK_X + model.beds[0] / 2;
-        ctx.strokeText(u.truck.label, lx, BED_TOP + 26);
-        ctx.fillText(u.truck.label, lx, BED_TOP + 26);
+        const lx = TRUCK_X + model.beds[0] / 2 - 20;
+        const ly = (fx.pileTop || BED_TOP) - 12;
+        ctx.strokeText(u.truck.label, lx, ly);
+        ctx.fillText(u.truck.label, lx, ly);
       }
     }
 
@@ -735,13 +765,16 @@ window.IdleSilo = window.IdleSilo || {};
       ctx.lineWidth = selected ? 4 : 1;
       ctx.strokeRect(tile.x + ctx.lineWidth / 2, tile.y + ctx.lineWidth / 2, tile.w - ctx.lineWidth, tile.h - ctx.lineWidth);
       if (selected && layout.cells > 1) {
+        const fs = Math.max(10, Math.min(15, 24 * layout.s));
+        const text = `${view.units[tile.index].name.toUpperCase()} · SÉLECTIONNÉ`;
+        ctx.font = `600 ${fs}px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif`;
+        const bw = ctx.measureText(text).width + fs;
         ctx.fillStyle = '#e5b034';
-        ctx.fillRect(tile.x, tile.y, 118, 26);
+        ctx.fillRect(tile.x, tile.y, bw, fs * 1.7);
         ctx.fillStyle = '#111';
-        ctx.font = '600 15px "Barlow Condensed", "Roboto Condensed", Arial, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`${view.units[tile.index].name.toUpperCase()} · SÉLECTIONNÉ`, tile.x + 8, tile.y + 13.5);
+        ctx.fillText(text, tile.x + fs / 2, tile.y + fs * 0.9);
         ctx.textBaseline = 'alphabetic';
       }
     }

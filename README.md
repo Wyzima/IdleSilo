@@ -12,7 +12,9 @@ par une vis d'Archimède dans un camion.
   (porteur, semi-remorque, train routier, convoi exceptionnel).
 - Tous les silos sur une même image (canvas) : cliquez sur un silo pour le
   sélectionner et y verser un godet ; l'emplacement vide sert à construire le suivant.
-- Tout est accessible sur une seule page, sans onglets.
+- Tout est accessible sur une seule page, sans onglets : la scène et les
+  contrats restent à l'écran, les améliorations défilent dans une bande à droite.
+- Logo Exventys sur les bennes des camions.
 - Équipements à niveaux et lignes de production passives.
 - Méthodes (QFD, Taguchi, TOC, éléments finis, TRIZ, co-engineering).
 - 24 succès (+2 % chacun) et prestige « Brevets INPI » (+5 % par brevet).

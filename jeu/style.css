@@ -1,8 +1,8 @@
 /* Direction artistique : un tableau de bord d'usine aux couleurs d'Exventys.
    Noir et or de la marque, béton clair pour le fond, signalétique en
    Barlow Condensed pour les chiffres et les titres, Roboto pour le texte.
-   Mise en page : la scène (tous les silos) en pleine largeur, puis trois
-   colonnes : commandes, silo sélectionné, usine. */
+   Mise en page : la scène (tous les silos) et les contrats restent toujours à
+   l'écran ; les améliorations défilent dans une bande à droite. */
 :root {
   --gold: #e5b034;
   --gold-deep: #b9870b;
@@ -24,8 +24,11 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+html, body { height: 100%; }
 body {
   margin: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
@@ -44,7 +47,8 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: 12px 28px;
-  padding: 12px 24px 16px;
+  flex: none;
+  padding: 10px 24px 14px;
   background: var(--black);
   color: #fff;
 }
@@ -85,17 +89,26 @@ button { font-family: inherit; }
 .sound:hover, .sound:focus-visible { border-color: var(--gold); outline: none; }
 
 /* ---------- Mise en page ---------- */
-.layout {
-  max-width: 1480px;
-  margin: 0 auto;
+.app {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  padding: 16px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 14px;
+  padding: 14px;
 }
-.play { grid-column: 1 / -1; min-width: 0; }
-.col { min-width: 0; display: grid; gap: 16px; }
+.stage { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-right: 4px;
+  scrollbar-color: #b7b2a6 transparent;
+}
 
 .card {
   background: var(--card);
@@ -116,9 +129,19 @@ button { font-family: inherit; }
 .card h3 { margin-top: 16px; font-size: .95rem; }
 
 /* ---------- Scène ---------- */
-.scene-box { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 10px; }
-.canvas-wrap { width: 100%; }
-.scene { display: block; width: 100%; border-radius: 2px; touch-action: manipulation; }
+.scene-box {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px;
+}
+/* La scène occupe toute la hauteur disponible ; le dessin s'y adapte. */
+.canvas-wrap { flex: 1; min-height: 220px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.scene { display: block; border-radius: 2px; touch-action: manipulation; }
 .scene:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 3px; }
 .scene-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 10px; }
 .caption { margin: 0; font-size: .88rem; color: var(--muted); min-width: 0; }
@@ -228,18 +251,22 @@ button { font-family: inherit; }
 }
 .unlock-next:disabled, .dark-btn:disabled { background: #e3ddcf; color: var(--muted); cursor: not-allowed; }
 
-/* ---------- Commandes ---------- */
-.order-active { background: var(--gold-soft); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
+/* ---------- Commandes : bandeau fixe sous la scène ---------- */
+.orders { flex: none; padding: 10px 14px 12px; }
+.orders h2 { margin-bottom: 8px; padding-bottom: 6px; }
+.orders-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.order-active { grid-column: span 1; background: var(--gold-soft); border: 1px solid var(--gold); border-radius: 4px; padding: 8px 10px; font-size: .82rem; }
 .order-head, .order-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.order-timer { font: 700 1.2rem var(--font-sign); color: var(--gold-deep); font-variant-numeric: tabular-nums; }
+.order-head strong { color: var(--black); }
+.order-timer { font: 700 1.1rem/1 var(--font-sign); color: var(--gold-deep); font-variant-numeric: tabular-nums; }
 .order-timer.urgent { color: var(--alert); }
-.order-what { font-size: .88rem; margin: 4px 0 8px; }
-.order-foot { font-size: .82rem; color: var(--muted); margin-top: 6px; }
-.progress { height: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.order-what { margin: 3px 0 6px; }
+.order-foot { color: var(--muted); margin-top: 4px; }
+.progress { height: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .bar { height: 100%; width: 0; background: var(--gold); transition: width .2s; }
 
-.offers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.offer { display: grid; gap: 3px; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: .84rem; }
+.offers { display: contents; list-style: none; }
+.offer { display: grid; align-content: start; gap: 2px; border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; font-size: .8rem; min-width: 0; }
 .offer .client { font-weight: 700; color: var(--black); }
 .offer .dot { margin-right: 6px; vertical-align: -1px; }
 .offer .meta { color: var(--muted); }
@@ -250,8 +277,8 @@ button { font-family: inherit; }
   color: var(--gold);
   border: 0;
   border-radius: 3px;
-  padding: 5px 14px;
-  font: 600 .95rem var(--font-sign);
+  padding: 4px 12px;
+  font: 600 .92rem var(--font-sign);
   letter-spacing: .05em;
   cursor: pointer;
 }
@@ -347,22 +374,50 @@ button { font-family: inherit; }
 }
 .confirm-actions .confirm-ok { background: var(--black); color: var(--gold); border-color: var(--black); }
 
-/* ---------- Écrans moyens : deux colonnes ---------- */
+/* ---------- Écrans moyens : bande plus étroite ---------- */
 @media (max-width: 1100px) {
-  .layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app { grid-template-columns: minmax(0, 1fr) 320px; }
+  .orders-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ---------- Mobile : une seule colonne ---------- */
-@media (max-width: 720px) {
-  .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 12px 24px; gap: 12px; }
-  .topbar { padding: 12px 16px 16px; }
+/* ---------- Mobile : la scène reste collée en haut, le reste défile ---------- */
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  body { display: block; }
+  .app { display: block; padding: 0 12px 24px; }
+  .stage { display: block; }
+  .scene-box {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    margin: 0 -12px 12px;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    padding: 6px 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+  }
+  .canvas-wrap { flex: none; min-height: 0; max-height: 40vh; }
+  .build-btn { padding: 6px 12px; font-size: .9rem; }
+  .scene-bar { margin-top: 4px; }
+  .caption { font-size: .75rem; }
+  .scene-hint { display: none; }
+  .orders { margin-bottom: 12px; }
+  .panel { overflow: visible; padding-right: 0; }
+  .topbar { padding: 10px 16px 14px; }
   .brand { gap: 10px; }
   .logo img { height: 26px; width: 115px; }
   .topbar h1 { font-size: 1.5rem; }
-  .sound { position: absolute; top: 12px; right: 16px; }
-  .scores { gap: 4px 20px; }
+  .sound { position: absolute; top: 10px; right: 16px; }
+  .scores { gap: 2px 18px; }
   .scores div { min-width: 0; }
-  .scores dd { font-size: 1.35rem; }
+  .scores dd { font-size: 1.3rem; }
+}
+
+/* Écrans peu hauts : plus de place pour les silos */
+@media (min-width: 761px) and (max-height: 820px) {
+  .scene-hint { display: none; }
+  .topbar { padding-top: 6px; padding-bottom: 12px; }
+  .scores dd { font-size: 1.45rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -24,9 +24,9 @@
     <button id="sound" class="sound" type="button" aria-pressed="true" title="Couper le son">🔊</button>
   </header>
 
-  <main class="layout">
-    <!-- Scène : tous les silos sur une même image -->
-    <section class="play" aria-label="Ligne de production">
+  <main class="app">
+    <!-- Scène et contrats : toujours visibles -->
+    <section class="stage" aria-label="Ligne de production">
       <div class="scene-box">
         <div class="canvas-wrap">
           <canvas id="scene" class="scene" tabindex="0" role="img"
@@ -45,31 +45,29 @@
         </div>
         <p id="scene-hint" class="scene-hint">Cliquez sur le silo pour y verser un godet.</p>
       </div>
-    </section>
-
-    <!-- Commandes clients -->
-    <section class="col" aria-label="Commandes">
       <section class="card orders" aria-labelledby="orders-title">
         <h2 id="orders-title">Commandes clients</h2>
         <div id="orders-locked" class="muted">Livrez 3 camions pour recevoir vos premières commandes.</div>
-        <div id="order-active" class="order-active" hidden>
-          <div class="order-head">
-            <strong id="order-client"></strong>
-            <span id="order-timer" class="order-timer"></span>
+        <div class="orders-row">
+          <div id="order-active" class="order-active" hidden>
+            <div class="order-head">
+              <strong id="order-client"></strong>
+              <span id="order-timer" class="order-timer"></span>
+            </div>
+            <div id="order-what" class="order-what"></div>
+            <div class="progress"><div id="order-bar" class="bar"></div></div>
+            <div class="order-foot">
+              <span id="order-progress"></span>
+              <span>Prime : <strong id="order-reward"></strong></span>
+            </div>
           </div>
-          <div id="order-what" class="order-what"></div>
-          <div class="progress"><div id="order-bar" class="bar"></div></div>
-          <div class="order-foot">
-            <span id="order-progress"></span>
-            <span>Prime : <strong id="order-reward"></strong></span>
-          </div>
+          <ul id="order-offers" class="offers"></ul>
         </div>
-        <ul id="order-offers" class="offers"></ul>
       </section>
     </section>
 
-    <!-- Colonne du silo affiché : équipement et matériau -->
-    <section class="col" aria-label="Silo affiché">
+    <!-- Modificateurs : bande déroulante à droite -->
+    <aside class="panel" aria-label="Améliorations">
       <section class="card">
         <h2 id="equip-title">Équipement du silo 1</h2>
         <ul id="equip-list" class="items"></ul>
@@ -80,10 +78,6 @@
         <ul id="materials-list" class="chips"></ul>
         <button id="unlock-next" class="unlock-next" type="button"></button>
       </section>
-    </section>
-
-    <!-- Colonne de l'usine : automatisation, méthodes, progrès -->
-    <section class="col" aria-label="Usine">
       <section class="card">
         <h2>Lignes automatiques</h2>
         <label class="field" for="lines-material">Matériau livré par ces lignes
@@ -107,7 +101,7 @@
         <p id="ach-detail" class="muted small">Chaque succès donne +2 % sur les ventes. Survolez une étoile pour la voir.</p>
       </section>
       <button id="reset" class="reset" type="button">Recommencer la partie</button>
-    </section>
+    </aside>
   </main>
 
   <div id="confirm" class="confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-text" hidden>
