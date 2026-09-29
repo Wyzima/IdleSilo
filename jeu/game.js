@@ -15,9 +15,9 @@
   const SITES_UNLOCK_TRUCKS = 10;
   const siteCost = n => 1500 * Math.pow(15, n - 1); // prix du (n+1)e silo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const COMBO_MAX = 40;          // clics rapides pour atteindre la cadence ×5
+  const COMBO_MAX = 60;          // clics rapides pour atteindre la cadence ×5
   const GOLDEN_DURATION = 8;     // secondes pour attraper le camion doré
-  const FRENZY = { sales: 5, salesTime: 30, click: 10, clickTime: 20 };
+  const FRENZY = { sales: 3, salesTime: 30, click: 5, clickTime: 20 };
 
   // ---------- État ----------
 
@@ -162,9 +162,10 @@
 
   // ---------- Presse à injection ----------
   const combo = { heat: 0, last: -1e9 };
-  const partValue = (t = state.press.tier) => 5 * Math.pow(6, t);
-  const moldCount = (l = state.press.molds) => Math.pow(2, l);
-  const incomeShare = (l = state.press.eng) => 0.03 + 0.03 * l;
+  // Valeurs volontairement modestes : la presse complète la production sans la remplacer.
+  const partValue = (t = state.press.tier) => 0.5 * Math.pow(3, t); // 0,5 €, 1,5 €, 4,5 €… 1 094 €
+  const moldCount = (l = state.press.molds) => 1 + l;               // 1 à 9 pièces par clic
+  const incomeShare = (l = state.press.eng) => 0.002 * (1 + l);     // 0,2 % à 2,2 % du revenu auto
   const comboMult = () => 1 + (combo.heat / COMBO_MAX) * 4;
   const pressUpCost = u => u.costBase * Math.pow(u.costGrowth, state.press[u.id]);
   // Gain d'un clic : la pièce moulée, plus une part du revenu automatique.
@@ -208,6 +209,7 @@
   const fmtT = n => `${fmt(n)} t`;
   const fmtV = n => `${fmt(n)} m³`;
   const fmtPct = n => `${Math.round(n * 100)} %`;
+  const fmtPctFine = n => `${(n * 100).toFixed(1).replace('.', ',').replace(',0', '')} %`;
   const fmtDuration = s => {
     const m = Math.floor(s / 60);
     const r = Math.floor(s % 60);
@@ -324,7 +326,7 @@
     audio.play('golden');
     const r = Math.random();
     if (r < 0.4) {
-      const lump = Math.max(250, autoIncome() * 60 + partValue() * moldCount() * bonusMult() * 30);
+      const lump = Math.max(100, autoIncome() * 45 + partValue() * moldCount() * bonusMult() * 20);
       earn(lump, 0);
       toast(`Camion doré : prime de ${fmtE(lump)} !`);
     } else if (r < 0.75) {
@@ -779,7 +781,7 @@
   const pressEffects = {
     tier: l => `${PARTS[l + 1].name} : ${fmtE(partValue(l))} → ${fmtE(partValue(l + 1))} la pièce`,
     molds: l => `${fmt(moldCount(l))} → ${fmt(moldCount(l + 1))} pièces par clic`,
-    eng: l => `${Math.round(incomeShare(l) * 100)} % → ${Math.round(incomeShare(l + 1) * 100)} % du revenu auto par clic`,
+    eng: l => `${fmtPctFine(incomeShare(l))} → ${fmtPctFine(incomeShare(l + 1))} du revenu auto par clic`,
   };
   const pressRows = PRESS_UPGRADES.map(u => {
     const r = itemButton(ui.pressList, () => buyPressUpgrade(u), PRESS_ICONS[u.id]);

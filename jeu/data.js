@@ -153,9 +153,9 @@ window.IdleSilo = window.IdleSilo || {};
 
   // Améliorations de l'atelier (achats à niveaux).
   const PRESS_UPGRADES = [
-    { id: 'tier', name: 'Gamme de pièces', maxLevel: PARTS.length - 1, costBase: 150, costGrowth: 15 },
-    { id: 'molds', name: 'Moule multi-empreintes', maxLevel: 8, costBase: 400, costGrowth: 9 },
-    { id: 'eng', name: 'Ingénierie de production', maxLevel: 10, costBase: 2000, costGrowth: 7 },
+    { id: 'tier', name: 'Gamme de pièces', maxLevel: PARTS.length - 1, costBase: 100, costGrowth: 12 },
+    { id: 'molds', name: 'Moule multi-empreintes', maxLevel: 8, costBase: 250, costGrowth: 8 },
+    { id: 'eng', name: 'Ingénierie de production', maxLevel: 10, costBase: 5000, costGrowth: 6 },
   ];
 
   // Personnalisations : achetées une fois, conservées après un dépôt de brevets.
