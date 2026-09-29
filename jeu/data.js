@@ -65,7 +65,7 @@ window.IdleSilo = window.IdleSilo || {};
     { id: 'silo', name: 'Silo agrandi', maxLevel: 40, costBase: 30, costGrowth: 2.2 },
     { id: 'vis', name: "Moteur de vis d'Archimède", maxLevel: 40, costBase: 40, costGrowth: 1.9 },
     { id: 'camion', name: 'Camion plus grand', maxLevel: 40, costBase: 80, costGrowth: 2.3 },
-    { id: 'auto', name: 'Chargeuse automatique', maxLevel: 50, costBase: 150, costGrowth: 1.8 },
+    { id: 'auto', name: 'Alimentation automatique', maxLevel: 50, costBase: 150, costGrowth: 1.8 },
   ];
 
   // Lignes automatiques : débit passif en m³/s du matériau sélectionné.
@@ -80,16 +80,19 @@ window.IdleSilo = window.IdleSilo || {};
     { id: 'hub', name: "Centre d'ingénierie Exventys", cost: 2e9, rate: 35000 },
   ];
 
+  // Niveau le plus élevé d'un équipement parmi tous les silos.
+  const maxLevel = (s, id) => Math.max(...s.sites.map(site => site.levels[id]));
+
   // Méthodes : achats uniques, inspirés des méthodes présentées sur exventys.com.
   const METHODS = [
     { id: 'taguchi', name: 'Plans d\'expérience Taguchi', desc: 'Débit de la vis ×1,5', cost: 2000,
-      unlock: s => s.levels.vis >= 3 },
+      unlock: s => maxLevel(s, 'vis') >= 3 },
     { id: 'qfd', name: 'Voix du client (QFD)', desc: 'Primes des commandes ×1,5', cost: 5000,
       unlock: s => s.orders.completed >= 1 },
     { id: 'toc', name: 'Théorie des contraintes (TOC)', desc: 'Rotation des camions deux fois plus rapide', cost: 20000,
       unlock: s => s.trucks >= 50 },
     { id: 'fea', name: 'Analyse par éléments finis', desc: 'Volume du silo et du godet ×2', cost: 60000,
-      unlock: s => s.levels.silo >= 5 },
+      unlock: s => maxLevel(s, 'silo') >= 5 },
     { id: 'triz', name: 'Innovation TRIZ', desc: 'Toutes les ventes ×1,5', cost: 250000,
       unlock: s => s.runEarned >= 1e5 },
     { id: 'coeng', name: 'Co-engineering', desc: 'Lignes automatiques ×2', cost: 2e6,
@@ -111,6 +114,9 @@ window.IdleSilo = window.IdleSilo || {};
     { id: 'mat5', name: 'Polyvalent', desc: 'Débloquer 5 matériaux', test: s => s.unlocked.length >= 5 },
     { id: 'mat15', name: 'Catalogue fourni', desc: 'Débloquer 15 matériaux', test: s => s.unlocked.length >= 15 },
     { id: 'mat30', name: 'Tout le catalogue', desc: 'Débloquer les 30 matériaux', test: s => s.unlocked.length >= 30 },
+    { id: 'silo2', name: 'Deuxième silo', desc: 'Posséder 2 silos', test: s => s.sites.length >= 2 },
+    { id: 'silo6', name: 'Parc de silos', desc: 'Posséder 6 silos', test: s => s.sites.length >= 6 },
+    { id: 'autoAll', name: 'Usine autonome', desc: 'Alimentation automatique sur 3 silos', test: s => s.sites.filter(x => x.levels.auto > 0).length >= 3 },
     { id: 'line1', name: 'Automatisation', desc: 'Acheter une ligne automatique', test: s => totalLines(s) >= 1 },
     { id: 'line50', name: 'Usine tentaculaire', desc: 'Posséder 50 lignes automatiques', test: s => totalLines(s) >= 50 },
     { id: 'allLines', name: 'Gamme complète', desc: 'Posséder chaque type de ligne', test: s => Object.values(s.lines).every(n => n > 0) },

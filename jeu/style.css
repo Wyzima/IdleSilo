@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 :root { color-scheme: light; }
 
@@ -247,6 +248,49 @@ body {
 }
 .toast.show { transform: translate(-50%, 0); visibility: visible; }
 
+/* ---------- Silos ---------- */
+.sites {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.site {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: .78rem;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.site:hover { border-color: var(--gold); }
+.site.selected { border: 2px solid var(--gold); background: var(--soft); }
+.site .site-head { display: flex; justify-content: space-between; gap: 6px; font-weight: 700; color: #000; }
+.site .site-mat { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.site .site-mat span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .3); flex: none; }
+.site .gauge { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
+.site .gauge div { height: 100%; background: var(--gold); }
+.site .status { color: var(--muted); }
+.site .status.run { color: #23a455; }
+.site-buy { border-style: dashed; place-content: center; text-align: center; color: var(--muted); }
+.site-buy strong { color: #000; }
+.site-buy:disabled { cursor: not-allowed; opacity: .6; }
+
+.feed-pipe { fill: none; stroke: #777; stroke-width: 10; stroke-linejoin: round; }
+.feed-flow { fill: none; stroke-width: 4; stroke-dasharray: 6 10; stroke-linejoin: round; opacity: 0; }
+.feed-flow.on { opacity: 1; animation: feed .5s linear infinite; }
+@keyframes feed { to { stroke-dashoffset: -16; } }
+.feed-motor { fill: #444; }
+
+.field { display: grid; gap: 4px; margin-bottom: 12px; font-size: .8rem; color: var(--muted); }
+.field select { font: inherit; font-size: .9rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: #fff; }
+
 /* ---------- Son ---------- */
 .sound {
   background: none;
@@ -403,4 +447,5 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .flights, .prompt, .truck.leaving, .floater { animation: none !important; }
   #particles, #grains { display: none; }
+  .feed-flow.on { animation: none; }
 }

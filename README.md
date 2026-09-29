@@ -7,7 +7,9 @@ par une vis d'Archimède dans un camion.
   part livrer quand elle est pleine.
 - 30 matériaux avec prix, densité et écoulement propres.
 - Commandes clients à durée limitée, avec prime.
-- Équipements à niveaux, chargeuse automatique, lignes de production passives.
+- Jusqu'à 6 silos, chacun avec son matériau, sa vis, son camion et son
+  alimentation automatique.
+- Équipements à niveaux et lignes de production passives.
 - Méthodes (QFD, Taguchi, TOC, éléments finis, TRIZ, co-engineering).
 - 24 succès (+2 % chacun) et prestige « Brevets INPI » (+5 % par brevet).
 - Sons synthétisés (bouton pour couper) et grains animés.

@@ -23,6 +23,7 @@
 
   <main class="layout">
     <section class="scene-wrap" aria-label="Ligne de production">
+      <div id="sites" class="sites" aria-label="Vos silos"></div>
       <svg id="scene" class="scene" viewBox="0 0 800 440" role="img" aria-labelledby="scene-title">
         <title id="scene-title">Un silo se vide par une vis d'Archimède dans un camion</title>
         <defs>
@@ -46,6 +47,13 @@
 
         <!-- Sol -->
         <rect x="0" y="400" width="800" height="40" class="ground"/>
+
+        <!-- Conduite d'alimentation automatique -->
+        <g id="feed" class="feed" hidden>
+          <path d="M-10 10 H150 V26" class="feed-pipe"/>
+          <path id="feed-flow" d="M-10 10 H150 V26" class="feed-flow"/>
+          <rect x="4" y="0" width="30" height="20" rx="3" class="feed-motor"/>
+        </g>
 
         <!-- Silo (cliquable) -->
         <g id="silo" class="silo" role="button" tabindex="0" aria-label="Verser un godet dans le silo">
@@ -100,10 +108,11 @@
         <g id="particles"></g>
       </svg>
       <p class="caption">
-        Matériau : <strong id="current-material">Sable</strong>
+        <strong id="current-material">Silo 1 · Sable</strong>
         · <span id="current-price">10 €/t</span>
-        · Vis : <span id="screw-rate">0,5 t/s</span>
-        · Godet : <span id="bucket-size">0,8 t</span>
+        · Vis <span id="screw-rate">Ø200 mm, 0,9 t/s</span>
+        · Godet <span id="bucket-size">0,8 t</span>
+        · <span id="truck-info">Camion benne 10 t</span>
         <span id="auto-status" class="auto-status"></span>
       </p>
 
@@ -139,15 +148,18 @@
           <h3>Méthodes</h3>
           <div id="methods-list" class="methods"></div>
         </div>
-        <h3>Ligne principale</h3>
+        <h3 id="equip-title">Silo 1</h3>
         <ul id="equip-list" class="items"></ul>
       </div>
       <div class="panel" data-panel="lines" hidden>
-        <p class="panel-intro">Des lignes qui livrent toutes seules le matériau sélectionné, même quand vous êtes absent.</p>
+        <p class="panel-intro">Des lignes qui livrent toutes seules, même quand vous êtes absent.</p>
+        <label class="field" for="lines-material">Matériau livré par ces lignes
+          <select id="lines-material"></select>
+        </label>
         <ul id="lines-list" class="items"></ul>
       </div>
       <div class="panel" data-panel="materials" hidden>
-        <p class="panel-intro">Chaque matériau a son prix, sa densité et son écoulement dans la vis. Le choix s'applique aux prochains godets et aux lignes automatiques.</p>
+        <p class="panel-intro">Chaque matériau a son prix, sa densité et son écoulement dans la vis. Le choix s'applique aux prochains godets du silo sélectionné.</p>
         <ul id="materials-list" class="materials"></ul>
       </div>
       <div class="panel" data-panel="progress" hidden>

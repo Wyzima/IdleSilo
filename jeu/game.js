@@ -3,33 +3,45 @@
 
   const { roundNice, MATERIALS, CLIENTS, EQUIPMENT, LINES, METHODS, ACHIEVEMENTS, audio } = window.IdleSilo;
 
-  const SAVE_KEY = 'idle-silo-save-v2';
+  const SAVE_KEY = 'idle-silo-save-v3';
   const OFFLINE_CAP_SECONDS = 8 * 3600;
   const LINE_COST_GROWTH = 1.15;
   const ORDERS_UNLOCK_TRUCKS = 3;
   const ORDER_OFFERS = 3;
   const ORDER_REFRESH_SECONDS = 60;
   const PATENT_BASE = 1e5; // brevets = racine cubique (gains totaux / 100 000 €)
+  const MAX_SITES = 6;
+  const SITES_UNLOCK_TRUCKS = 25;
+  const siteCost = n => 5000 * Math.pow(20, n - 1); // prix du (n+1)e silo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- État ----------
 
+  // Un site = un silo avec sa vis, son camion et son équipement.
+  function newSite(matId = MATERIALS[0].id) {
+    const m = MATERIALS.find(x => x.id === matId) || MATERIALS[0];
+    return {
+      material: m.id,
+      levels: Object.fromEntries(EQUIPMENT.map(e => [e.id, 0])),
+      // Contenu du silo : volume (m³) et caractéristiques moyennes du mélange.
+      silo: { vol: 0, density: m.density, flow: m.flow, price: m.price, color: m.color, mat: m.id },
+      truck: { load: 0, value: 0, mix: {}, color: m.color },
+      leaving: 0,
+      autoAcc: 0,
+    };
+  }
+
   function freshRun() {
-    const sand = MATERIALS[0];
     return {
       money: 0,
       runEarned: 0,
       trucks: 0,
-      material: sand.id,
-      unlocked: [sand.id],
-      levels: Object.fromEntries(EQUIPMENT.map(e => [e.id, 0])),
+      unlocked: [MATERIALS[0].id],
+      sites: [newSite()],
+      selected: 0,
+      linesMaterial: MATERIALS[0].id,
       lines: Object.fromEntries(LINES.map(l => [l.id, 0])),
       methods: [],
-      // Contenu du silo : volume (m³) et caractéristiques moyennes du mélange.
-      silo: { vol: 0, density: sand.density, flow: sand.flow, price: sand.price, color: sand.color, mat: sand.id },
-      truck: { load: 0, value: 0, mix: {}, color: sand.color },
-      leaving: 0,
-      autoAcc: 0,
       orders: { offers: [], active: null, completed: 0, refresh: 0 },
     };
   }
@@ -47,16 +59,21 @@
   function load() {
     const base = freshState();
     try {
-      localStorage.removeItem('idle-silo-save-v1'); // ancienne version, incompatible
+      // Anciennes versions, incompatibles.
+      localStorage.removeItem('idle-silo-save-v1');
+      localStorage.removeItem('idle-silo-save-v2');
       const data = JSON.parse(localStorage.getItem(SAVE_KEY));
       if (!data) return base;
+      const sites = data.sites.map(site => {
+        const b = newSite(site.material);
+        return { ...b, ...site, levels: { ...b.levels, ...site.levels },
+          silo: { ...b.silo, ...site.silo }, truck: { ...b.truck, ...site.truck } };
+      });
       return {
-        ...base, ...data,
-        levels: { ...base.levels, ...data.levels },
+        ...base, ...data, sites,
+        selected: Math.min(data.selected || 0, sites.length - 1),
         lines: { ...base.lines, ...data.lines },
         stats: { ...base.stats, ...data.stats },
-        silo: { ...base.silo, ...data.silo },
-        truck: { ...base.truck, ...data.truck },
         orders: { ...base.orders, ...data.orders },
       };
     } catch {
@@ -74,15 +91,23 @@
   // ---------- Règles ----------
 
   const has = id => state.methods.includes(id);
-  const material = (id = state.material) => MATERIALS.find(m => m.id === id) || MATERIALS[0];
-  const lvl = id => state.levels[id];
+  const material = id => MATERIALS.find(m => m.id === id) || MATERIALS[0];
+  const cur = () => state.sites[state.selected];
+  const curMaterial = () => material(cur().material);
+  const lvl = (id, site = cur()) => site.levels[id];
 
+  // Caractéristiques d'un site selon ses niveaux (par défaut : le silo sélectionné).
   const bucketVolume = (l = lvl('godet')) => 0.5 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
   const siloVolume = (l = lvl('silo')) => 5 * Math.pow(1.5, l) * (has('fea') ? 2 : 1);
   const screwVolume = (l = lvl('vis')) => 0.5 * Math.pow(1.35, l) * (has('taguchi') ? 1.5 : 1);
   const truckCapacity = (l = lvl('camion')) => 10 * Math.pow(1.6, l);
-  const autoRate = (l = lvl('auto')) => 0.2 * l; // godets par seconde
+  // Godets versés par seconde : 0,5 au niveau 1, puis +25 % par niveau.
+  const autoRate = (l = lvl('auto')) => (l > 0 ? 0.5 * Math.pow(1.25, l - 1) : 0);
   const truckRotation = () => (has('toc') ? 1.5 : 3);
+
+  const screwDiameter = l => 200 + 50 * l; // mm, pour l'affichage
+  const TRUCK_MODELS = [[0, 'Camion benne'], [3, 'Porteur 8×4'], [6, 'Semi-remorque'], [10, 'Train routier'], [15, 'Convoi exceptionnel']];
+  const truckModel = l => TRUCK_MODELS.filter(([min]) => l >= min).pop()[1];
 
   const equipCost = eq => eq.costBase * Math.pow(eq.costGrowth, lvl(eq.id));
   const lineCost = l => Math.ceil(l.cost * Math.pow(LINE_COST_GROWTH, state.lines[l.id]));
@@ -93,8 +118,20 @@
 
   const passiveVolume = () =>
     LINES.reduce((s, l) => s + l.rate * state.lines[l.id], 0) * (has('coeng') ? 2 : 1);
-  const passiveTons = (m = material()) => passiveVolume() * m.density * m.flow;
-  const passiveIncome = () => passiveTons() * material().price * salesMult();
+  const linesMaterial = () => material(state.linesMaterial);
+  const passiveTons = (m = linesMaterial()) => passiveVolume() * m.density * m.flow;
+  const passiveIncome = () => passiveTons() * linesMaterial().price * salesMult();
+
+  // Débit moyen (t/s) d'un silo alimenté automatiquement, rotations de camion comprises.
+  function autoSiteTons(site) {
+    const l = site.levels;
+    if (!l.auto) return 0;
+    const m = material(site.material);
+    const volPerSec = Math.min(autoRate(l.auto) * bucketVolume(l.godet), screwVolume(l.vis) * m.flow);
+    const tps = volPerSec * m.density;
+    const cap = truckCapacity(l.camion);
+    return tps * cap / (cap + tps * truckRotation());
+  }
 
   const patentsPotential = () => Math.floor(Math.cbrt(state.stats.earned / PATENT_BASE));
   const patentsGain = () => Math.max(0, patentsPotential() - state.patents);
@@ -137,7 +174,9 @@
     prompt: $('silo-prompt'), flights: $('flights'), grains: $('grains'), particles: $('particles'),
     stream: $('stream'), truck: $('truck'), pile: $('pile'), truckLabel: $('truck-label'),
     curMat: $('current-material'), curPrice: $('current-price'), screwRate: $('screw-rate'),
-    bucket: $('bucket-size'), autoStatus: $('auto-status'),
+    bucket: $('bucket-size'), truckInfo: $('truck-info'), autoStatus: $('auto-status'),
+    sites: $('sites'), feed: $('feed'), feedFlow: $('feed-flow'), equipTitle: $('equip-title'),
+    linesMaterial: $('lines-material'),
     ordersLocked: $('orders-locked'), orderActive: $('order-active'), orderClient: $('order-client'),
     orderTimer: $('order-timer'), orderWhat: $('order-what'), orderBar: $('order-bar'),
     orderProgress: $('order-progress'), orderReward: $('order-reward'), offers: $('order-offers'),
@@ -162,12 +201,13 @@
 
   // ---------- Actions du joueur ----------
 
-  // Verse un godet du matériau sélectionné dans le silo. Renvoie les tonnes ajoutées.
-  function addBucket(manual) {
-    const s = state.silo;
-    const vol = Math.min(bucketVolume(), siloVolume() - s.vol);
+  // Verse un godet dans le silo d'un site, avec le matériau choisi pour ce site.
+  // Renvoie les tonnes ajoutées.
+  function addBucket(site, manual) {
+    const s = site.silo;
+    const vol = Math.min(bucketVolume(site.levels.godet), siloVolume(site.levels.silo) - s.vol);
     if (vol <= 1e-6) return 0;
-    const m = material();
+    const m = material(site.material);
     const total = s.vol + vol;
     const oldTons = s.vol * s.density;
     const newTons = vol * m.density;
@@ -182,7 +222,7 @@
   }
 
   function onSiloClick(e) {
-    const tons = addBucket(true);
+    const tons = addBucket(cur(), true);
     ui.silo.classList.remove('bump');
     void ui.silo.getBBox();
     ui.silo.classList.add('bump');
@@ -201,9 +241,27 @@
     const cost = equipCost(eq);
     if (lvl(eq.id) >= eq.maxLevel || state.money < cost) return;
     state.money -= cost;
-    state.levels[eq.id]++;
+    cur().levels[eq.id]++;
     audio.play('buy');
-    if (eq.id === 'auto' && lvl('auto') === 1) toast('Chargeuse automatique en service !');
+    if (eq.id === 'auto' && lvl('auto') === 1) toast(`Silo ${state.selected + 1} : alimentation automatique en service !`);
+  }
+
+  function buySite() {
+    const n = state.sites.length;
+    const cost = siteCost(n);
+    if (n >= MAX_SITES || state.stats.trucks < SITES_UNLOCK_TRUCKS || state.money < cost) return;
+    state.money -= cost;
+    state.sites.push(newSite(cur().material));
+    audio.play('buy');
+    selectSite(n);
+    toast(`Silo ${n + 1} construit ! Choisissez son matériau et équipez-le.`);
+  }
+
+  function selectSite(i) {
+    if (i === state.selected || !state.sites[i]) return;
+    state.selected = i;
+    clearParticles();
+    ui.truck.classList.remove('leaving');
   }
 
   function buyLine(line) {
@@ -231,7 +289,7 @@
       audio.play('buy');
       toast(`Matériau débloqué : ${m.name}`);
     }
-    state.material = m.id;
+    cur().material = m.id;
   }
 
   function prestige() {
@@ -341,7 +399,8 @@
     const m = material(pick(state.unlocked));
     const duration = pick([90, 120, 180]);
     // Quantité calibrée sur la capacité actuelle de l'usine pour ce matériau.
-    const tps = screwVolume() * m.flow * m.density * 0.6 + passiveTons(m);
+    const screws = state.sites.reduce((sum, site) => sum + screwVolume(site.levels.vis), 0);
+    const tps = screws * m.flow * m.density * 0.6 + passiveTons(m);
     const qty = roundNice(Math.max(5, tps * duration * rand(0.35, 0.6)));
     return {
       id: Math.random().toString(36).slice(2),
@@ -366,8 +425,8 @@
     if (!offer) return;
     o.offers = o.offers.filter(x => x !== offer);
     o.active = { ...offer, delivered: 0, remaining: offer.duration };
-    // Pratique : on bascule directement sur le matériau demandé.
-    state.material = offer.material;
+    // Si aucun silo ne produit ce matériau, le silo sélectionné bascule dessus.
+    if (!state.sites.some(site => site.material === offer.material)) cur().material = offer.material;
     audio.play('buy');
   }
 
@@ -403,62 +462,68 @@
 
   // ---------- Simulation ----------
 
-  let flowing = false;
+  const flowing = []; // la vis de chaque silo tourne-t-elle ?
+  const feeding = []; // l'alimentation automatique de chaque silo verse-t-elle ?
 
   function step(dt) {
     // Lignes automatiques.
     const pt = passiveTons() * dt;
     if (pt > 0) {
-      earn(pt * material().price * salesMult(), pt);
-      creditOrder(state.material, pt);
+      earn(pt * linesMaterial().price * salesMult(), pt);
+      creditOrder(state.linesMaterial, pt);
     }
-
-    // Chargeuse automatique.
-    state.autoAcc += autoRate() * dt;
-    while (state.autoAcc >= 1) {
-      state.autoAcc -= 1;
-      addBucket(false);
-    }
-
+    state.sites.forEach((site, i) => stepSite(site, i, dt));
     stepOrders(dt);
+  }
+
+  function stepSite(site, i, dt) {
+    // Alimentation automatique : des godets versés sans cliquer.
+    const s = site.silo;
+    feeding[i] = autoRate(site.levels.auto) > 0 && s.vol < siloVolume(site.levels.silo) - 1e-6;
+    site.autoAcc += autoRate(site.levels.auto) * dt;
+    while (site.autoAcc >= 1) {
+      site.autoAcc -= 1;
+      addBucket(site, false);
+    }
 
     // Le camion est parti livrer : la vis attend.
-    if (state.leaving > 0) {
-      state.leaving = Math.max(0, state.leaving - dt);
-      flowing = false;
+    if (site.leaving > 0) {
+      site.leaving = Math.max(0, site.leaving - dt);
+      flowing[i] = false;
       return;
     }
 
     // La vis transfère la matière du silo vers la benne.
-    const s = state.silo;
-    const t = state.truck;
-    const cap = truckCapacity();
-    let vol = Math.min(screwVolume() * s.flow * dt, s.vol);
+    const t = site.truck;
+    const cap = truckCapacity(site.levels.camion);
+    let vol = Math.min(screwVolume(site.levels.vis) * s.flow * dt, s.vol);
     let tons = vol * s.density;
     if (tons > cap - t.load) {
       tons = cap - t.load;
       vol = tons / s.density;
     }
-    flowing = tons > 1e-9;
-    if (flowing) {
+    flowing[i] = tons > 1e-9;
+    if (flowing[i]) {
       s.vol = Math.max(0, s.vol - vol);
       t.load += tons;
       t.value += tons * s.price;
       t.mix[s.mat] = (t.mix[s.mat] || 0) + tons;
       t.color = s.color;
     }
-    if (t.load >= cap - 1e-6) departTruck();
+    if (t.load >= cap - 1e-6) departTruck(site, i);
   }
 
-  function departTruck() {
-    const t = state.truck;
+  function departTruck(site, i) {
+    const t = site.truck;
     const value = t.value * salesMult();
     earn(value, t.load);
     for (const id in t.mix) creditOrder(id, t.mix[id]);
     state.trucks++;
     state.stats.trucks++;
-    state.truck = { load: 0, value: 0, mix: {}, color: t.color };
-    state.leaving = truckRotation();
+    site.truck = { load: 0, value: 0, mix: {}, color: t.color };
+    site.leaving = truckRotation();
+    // Animation et son seulement pour le silo affiché.
+    if (i !== state.selected) return;
     ui.truck.style.setProperty('--leave', `${truckRotation()}s`);
     ui.truck.classList.remove('leaving');
     void ui.truck.getBBox();
@@ -509,9 +574,11 @@
 
   function stepParticles(dt) {
     if (reducedMotion) return;
-    const color = state.silo.color;
+    const site = cur();
+    const on = flowing[state.selected];
+    const color = site.silo.color;
 
-    if (flowing) {
+    if (on) {
       grainSpawn += dt * Math.min(40, 8 + screwVolume() * 10);
       while (grainSpawn >= 1) { grainSpawn -= 1; spawnGrain(color); }
     }
@@ -519,7 +586,7 @@
     // Les grains avancent avec les spires, seulement quand la vis tourne.
     for (let i = grainPool.length - 1; i >= 0; i--) {
       const g = grainPool[i];
-      if (flowing) g.x += screwSpeedPx * dt;
+      if (on) g.x += screwSpeedPx * dt;
       if (g.x > 478) {
         g.el.remove();
         grainPool.splice(i, 1);
@@ -535,7 +602,7 @@
       p.vy += 900 * dt;
       p.y += p.vy * dt;
       p.x += p.vx * dt;
-      const floor = state.leaving > 0 ? 398 : pileTop;
+      const floor = site.leaving > 0 ? 398 : pileTop;
       if (p.y >= floor) {
         if (Math.random() < 0.35) spawnDust(p.x, floor, p.el.getAttribute('fill'));
         p.el.remove();
@@ -559,13 +626,22 @@
     }
   }
 
+  function clearParticles() {
+    for (const list of [grainPool, falling, dust]) {
+      list.forEach(p => p.el.remove());
+      list.length = 0;
+    }
+  }
+
   // ---------- Rendu de la scène ----------
 
   const SILO_TOP = 60, SILO_BOTTOM = 340;
   let lastScrewDuration = -1;
 
   function renderScene() {
-    const s = state.silo;
+    const site = cur();
+    const on = !!flowing[state.selected];
+    const s = site.silo;
     const cap = siloVolume();
     const ratio = Math.min(s.vol / cap, 1);
     const h = ratio * (SILO_BOTTOM - SILO_TOP);
@@ -576,7 +652,7 @@
     ui.prompt.classList.toggle('off', s.vol > 1e-6);
 
     // Tas dans la benne.
-    const t = state.truck;
+    const t = site.truck;
     const tCap = truckCapacity();
     const tr = Math.min(t.load / tCap, 1);
     pileTop = 334 - tr * 70;
@@ -586,13 +662,13 @@
     ui.truckLabel.textContent = `${fmt(t.load)} / ${fmtT(tCap)}`;
     ui.truckLabel.setAttribute('y', Math.min(312, pileTop - 8));
 
-    ui.stream.classList.toggle('on', flowing);
+    ui.stream.classList.toggle('on', on);
     ui.stream.setAttribute('y', OUTLET.y);
     ui.stream.setAttribute('height', Math.max(0, pileTop - OUTLET.y));
     ui.stream.setAttribute('fill', s.color);
 
     // Vitesse de rotation de la vis proportionnelle au débit (bornée).
-    ui.flights.classList.toggle('running', flowing);
+    ui.flights.classList.toggle('running', on);
     const duration = Math.max(0.12, Math.min(0.8, 0.35 / (screwVolume() * s.flow)));
     if (Math.abs(duration - lastScrewDuration) > 0.01) {
       ui.flights.style.animationDuration = `${duration}s`;
@@ -600,22 +676,30 @@
       // Les grains avancent plus vite que les spires pour rester lisibles.
       screwSpeedPx = 3 * 32 / duration;
     }
-    audio.setPouring(flowing);
+    audio.setPouring(on);
+
+    // Conduite d'alimentation automatique au-dessus du silo.
+    ui.feed.hidden = autoRate() === 0;
+    ui.feedFlow.classList.toggle('on', !!feeding[state.selected]);
+    ui.feedFlow.setAttribute('stroke', material(site.material).color);
   }
 
   // ---------- Rendu de l'interface ----------
 
   function renderStats() {
     ui.money.textContent = fmtE(state.money);
-    ui.income.textContent = `${fmtE(passiveIncome())}/s`;
+    const autoSites = state.sites.reduce((sum, site) =>
+      sum + autoSiteTons(site) * material(site.material).price, 0) * salesMult();
+    ui.income.textContent = `${fmtE(passiveIncome() + autoSites)}/s`;
     ui.trucks.textContent = fmt(state.stats.trucks);
     ui.tonnage.textContent = fmtT(state.stats.tons);
-    const m = material();
-    ui.curMat.textContent = m.name;
+    const m = curMaterial();
+    ui.curMat.textContent = `Silo ${state.selected + 1} · ${m.name}`;
     ui.curPrice.textContent = `${fmtE(m.price)}/t`;
-    ui.screwRate.textContent = `${fmtT(screwVolume() * m.flow * m.density)}/s`;
+    ui.screwRate.textContent = `Ø${screwDiameter(lvl('vis'))} mm, ${fmtT(screwVolume() * m.flow * m.density)}/s`;
     ui.bucket.textContent = fmtT(bucketVolume() * m.density);
-    ui.autoStatus.textContent = autoRate() > 0 ? `· Chargeuse : ${fmt(autoRate())} godet/s` : '';
+    ui.truckInfo.textContent = `${truckModel(lvl('camion'))} ${fmtT(truckCapacity())}`;
+    ui.autoStatus.textContent = autoRate() > 0 ? `· Alimentation auto : ${fmt(autoRate())} godet/s` : '';
   }
 
   function itemButton(parent, onClick) {
@@ -633,10 +717,13 @@
   const equipEffects = {
     godet: l => `${fmtV(bucketVolume(l))} → ${fmtV(bucketVolume(l + 1))} par clic`,
     silo: l => `Volume ${fmtV(siloVolume(l))} → ${fmtV(siloVolume(l + 1))}`,
-    vis: l => `Débit ${fmtV(screwVolume(l))}/s → ${fmtV(screwVolume(l + 1))}/s`,
-    camion: l => `Benne ${fmtT(truckCapacity(l))} → ${fmtT(truckCapacity(l + 1))}`,
+    vis: l => `Ø${screwDiameter(l)} → Ø${screwDiameter(l + 1)} mm : ${fmtV(screwVolume(l))}/s → ${fmtV(screwVolume(l + 1))}/s`,
+    camion: l => {
+      const next = truckModel(l + 1) !== truckModel(l) ? ` (${truckModel(l + 1)})` : '';
+      return `Benne ${fmtT(truckCapacity(l))} → ${fmtT(truckCapacity(l + 1))}${next}`;
+    },
     auto: l => (l === 0
-      ? 'Verse 0,2 godet/s sans cliquer'
+      ? `Remplit le silo sans cliquer : ${fmt(autoRate(1))} godet/s`
       : `${fmt(autoRate(l))} → ${fmt(autoRate(l + 1))} godet/s`),
   };
 
@@ -690,6 +777,7 @@
   });
 
   function renderShop() {
+    ui.equipTitle.textContent = `Équipement du silo ${state.selected + 1}`;
     EQUIPMENT.forEach((eq, i) => {
       const r = equipRows[i];
       const l = lvl(eq.id);
@@ -717,7 +805,7 @@
 
     // Une ligne est révélée quand on a gagné au moins la moitié de son prix.
     let mysteryShown = false;
-    const m = material();
+    const m = linesMaterial();
     LINES.forEach((line, i) => {
       const r = lineRows[i];
       const known = state.lines[line.id] > 0 || state.runEarned >= line.cost * 0.5;
@@ -742,9 +830,12 @@
       const unlocked = state.unlocked.includes(mat.id);
       r.li.hidden = !unlocked && nextShown;
       if (!unlocked) nextShown = true;
-      r.btn.classList.toggle('selected', mat.id === state.material);
+      r.btn.classList.toggle('selected', mat.id === cur().material);
       r.btn.classList.toggle('locked', !unlocked);
-      r.info.textContent = unlocked ? `${fmtE(mat.price)}/t` : `Débloquer : ${fmtE(mat.unlockCost)}`;
+      const usedBy = state.sites.map((site, n) => (site.material === mat.id ? n + 1 : 0)).filter(Boolean);
+      r.info.textContent = unlocked
+        ? `${fmtE(mat.price)}/t` + (usedBy.length ? ` · silo ${usedBy.join(', ')}` : '')
+        : `Débloquer : ${fmtE(mat.unlockCost)}`;
       r.btn.disabled = !unlocked && state.money < mat.unlockCost;
     });
 
@@ -759,8 +850,89 @@
     ACHIEVEMENTS.forEach((a, i) => achRows[i].classList.toggle('done', state.achievements.includes(a.id)));
     ui.achCount.textContent = `${state.achievements.length} / ${ACHIEVEMENTS.length}`;
 
+    renderLinesMaterial();
+    renderSites();
     renderOrders();
     renderStats();
+  }
+
+  // Sélecteur du matériau livré par les lignes automatiques.
+  let linesKey = '';
+  function renderLinesMaterial() {
+    const key = state.unlocked.join() + '|' + state.linesMaterial;
+    if (key === linesKey) return;
+    linesKey = key;
+    ui.linesMaterial.innerHTML = '';
+    for (const id of state.unlocked) {
+      const m = material(id);
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `${m.name} (${fmtE(m.price)}/t)`;
+      opt.selected = id === state.linesMaterial;
+      ui.linesMaterial.appendChild(opt);
+    }
+  }
+  ui.linesMaterial.addEventListener('change', () => {
+    if (state.unlocked.includes(ui.linesMaterial.value)) state.linesMaterial = ui.linesMaterial.value;
+  });
+
+  // Barre des silos : un bouton par silo, plus l'achat du suivant.
+  let sitesCount = -1;
+  let siteCards = [];
+  const buyCard = document.createElement('button');
+  buyCard.type = 'button';
+  buyCard.className = 'site site-buy';
+  buyCard.addEventListener('click', buySite);
+
+  function renderSites() {
+    if (sitesCount !== state.sites.length) {
+      sitesCount = state.sites.length;
+      ui.sites.innerHTML = '';
+      siteCards = state.sites.map((_, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'site';
+        btn.innerHTML = `<span class="site-head"><span>Silo ${i + 1}</span><span class="lvl"></span></span>
+          <span class="site-mat"><span class="dot"></span><span class="mname"></span></span>
+          <span class="gauge"><div></div></span>
+          <span class="status"></span>`;
+        btn.addEventListener('click', () => selectSite(i));
+        ui.sites.appendChild(btn);
+        return { btn, dot: btn.querySelector('.dot'), name: btn.querySelector('.mname'),
+          gauge: btn.querySelector('.gauge div'), status: btn.querySelector('.status'), lvl: btn.querySelector('.lvl') };
+      });
+      ui.sites.appendChild(buyCard);
+    }
+
+    state.sites.forEach((site, i) => {
+      const c = siteCards[i];
+      const m = material(site.material);
+      c.btn.classList.toggle('selected', i === state.selected);
+      c.btn.setAttribute('aria-pressed', i === state.selected);
+      c.dot.style.background = m.color;
+      c.name.textContent = m.name;
+      c.lvl.textContent = site.levels.auto > 0 ? 'Auto' : '';
+      c.gauge.style.width = `${Math.min(100, (site.silo.vol / siloVolume(site.levels.silo)) * 100)}%`;
+      let status;
+      if (site.leaving > 0) status = 'Camion en livraison';
+      else if (flowing[i]) status = `Chargement ${fmt(site.truck.load)} / ${fmtT(truckCapacity(site.levels.camion))}`;
+      else status = 'Silo vide';
+      c.status.textContent = status;
+      c.status.classList.toggle('run', !!flowing[i]);
+    });
+
+    // Le premier silo seul n'a pas besoin de la barre tant qu'on ne peut pas en acheter.
+    const n = state.sites.length;
+    const unlocked = state.stats.trucks >= SITES_UNLOCK_TRUCKS;
+    ui.sites.hidden = n === 1 && !unlocked;
+    buyCard.hidden = n >= MAX_SITES;
+    if (n < MAX_SITES) {
+      buyCard.disabled = !unlocked || state.money < siteCost(n);
+      const html = unlocked
+        ? `<strong>+ Silo ${n + 1}</strong><span>${fmtE(siteCost(n))}</span>`
+        : `<strong>+ Silo ${n + 1}</strong><span>après ${SITES_UNLOCK_TRUCKS} camions livrés</span>`;
+      if (buyCard.innerHTML !== html) buyCard.innerHTML = html;
+    }
   }
 
   let offersKey = '';
@@ -777,7 +949,8 @@
       ui.orderTimer.textContent = fmtDuration(Math.max(0, a.remaining));
       ui.orderTimer.classList.toggle('urgent', a.remaining < 20);
       ui.orderWhat.textContent = `${fmtT(a.qty)} de ${m.name.toLowerCase()}`
-        + (state.material !== a.material ? ' — sélectionnez ce matériau pour livrer !' : '');
+        + (state.sites.some(site => site.material === a.material) || state.linesMaterial === a.material
+          ? '' : ' — aucun silo ne produit ce matériau !');
       ui.orderBar.style.width = `${Math.min(100, (a.delivered / a.qty) * 100)}%`;
       ui.orderProgress.textContent = `${fmt(Math.min(a.delivered, a.qty))} / ${fmtT(a.qty)}`;
       ui.orderReward.textContent = fmtE(a.reward * orderMult());
@@ -813,11 +986,18 @@
 
   function applyOffline() {
     const away = Math.min((Date.now() - state.lastSaved) / 1000, OFFLINE_CAP_SECONDS);
-    const tons = passiveTons() * away;
+    // Les lignes automatiques et les silos alimentés automatiquement continuent de livrer.
+    let tons = passiveTons() * away;
+    let euros = tons * linesMaterial().price;
+    for (const site of state.sites) {
+      const t = autoSiteTons(site) * away;
+      tons += t;
+      euros += t * material(site.material).price;
+    }
+    euros *= salesMult();
     if (away > 10 && tons > 0) {
-      const euros = tons * material().price * salesMult();
       earn(euros, tons);
-      toast(`Pendant votre absence, vos lignes ont livré ${fmtT(tons)} (${fmtE(euros)}).`);
+      toast(`Pendant votre absence, votre usine a livré ${fmtT(tons)} (${fmtE(euros)}).`);
     }
     state.lastSaved = Date.now();
   }
