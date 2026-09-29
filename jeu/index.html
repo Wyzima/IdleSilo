@@ -18,6 +18,7 @@
       <div><dt>Camions livrés</dt><dd id="trucks">0</dd></div>
       <div><dt>Tonnage total</dt><dd id="tonnage">0 t</dd></div>
     </dl>
+    <button id="sound" class="sound" type="button" aria-pressed="true" title="Couper le son">🔊</button>
   </header>
 
   <main class="layout">
@@ -47,7 +48,7 @@
         <rect x="0" y="400" width="800" height="40" class="ground"/>
 
         <!-- Silo (cliquable) -->
-        <g id="silo" class="silo" role="button" tabindex="0" aria-label="Remplir le silo">
+        <g id="silo" class="silo" role="button" tabindex="0" aria-label="Verser un godet dans le silo">
           <line x1="84" y1="270" x2="84" y2="400" class="leg"/>
           <line x1="216" y1="270" x2="216" y2="400" class="leg"/>
           <path d="M60 60 L150 22 L240 60 Z" class="roof"/>
@@ -73,13 +74,14 @@
           <rect x="24" y="-26" width="452" height="52" rx="4" class="trough"/>
           <g clip-path="url(#screw-clip)">
             <rect x="24" y="-9" width="452" height="18" class="core"/>
+            <g id="grains"></g>
             <g id="flights" class="flights"></g>
           </g>
           <rect x="476" y="-11" width="30" height="22" fill="url(#steel)"/>
         </g>
 
-        <!-- Chute de matière -->
-        <rect id="stream" x="624" y="222" width="14" height="90" class="stream"/>
+        <!-- Filet de matière -->
+        <rect id="stream" x="627" y="222" width="8" height="90" class="stream"/>
 
         <!-- Camion -->
         <g id="truck" class="truck">
@@ -93,13 +95,35 @@
           <circle cx="740" cy="370" r="20" class="wheel"/>
           <text id="truck-label" x="616" y="312" class="truck-label">0 / 10 t</text>
         </g>
+
+        <!-- Grains qui tombent et poussière -->
+        <g id="particles"></g>
       </svg>
       <p class="caption">
-        Matériau actuel : <strong id="current-material">Sable</strong>
+        Matériau : <strong id="current-material">Sable</strong>
         · <span id="current-price">10 €/t</span>
         · Vis : <span id="screw-rate">0,5 t/s</span>
+        · Godet : <span id="bucket-size">0,8 t</span>
         <span id="auto-status" class="auto-status"></span>
       </p>
+
+      <section class="orders" aria-labelledby="orders-title">
+        <h2 id="orders-title">Commandes clients</h2>
+        <div id="orders-locked" class="orders-locked">Livrez 3 camions pour recevoir vos premières commandes.</div>
+        <div id="order-active" class="order-active" hidden>
+          <div class="order-head">
+            <strong id="order-client"></strong>
+            <span id="order-timer" class="order-timer"></span>
+          </div>
+          <div id="order-what" class="order-what"></div>
+          <div class="progress"><div id="order-bar" class="bar"></div></div>
+          <div class="order-foot">
+            <span id="order-progress"></span>
+            <span>Prime : <strong id="order-reward"></strong></span>
+          </div>
+        </div>
+        <ul id="order-offers" class="offers"></ul>
+      </section>
     </section>
 
     <aside class="shop">
@@ -107,19 +131,35 @@
         <button role="tab" aria-selected="true" data-tab="equip">Équipement</button>
         <button role="tab" aria-selected="false" data-tab="lines">Automatisation</button>
         <button role="tab" aria-selected="false" data-tab="materials">Matériaux</button>
+        <button role="tab" aria-selected="false" data-tab="progress">Progrès</button>
       </nav>
 
       <div class="panel" data-panel="equip">
-        <p class="panel-intro">Améliorez la ligne principale : silo, vis, camion.</p>
+        <div id="methods-block" hidden>
+          <h3>Méthodes</h3>
+          <div id="methods-list" class="methods"></div>
+        </div>
+        <h3>Ligne principale</h3>
         <ul id="equip-list" class="items"></ul>
       </div>
       <div class="panel" data-panel="lines" hidden>
-        <p class="panel-intro">Des lignes qui livrent toutes seules, même quand vous êtes absent.</p>
+        <p class="panel-intro">Des lignes qui livrent toutes seules le matériau sélectionné, même quand vous êtes absent.</p>
         <ul id="lines-list" class="items"></ul>
       </div>
       <div class="panel" data-panel="materials" hidden>
-        <p class="panel-intro">Débloquez des matériaux plus rentables. Le choix s'applique au prochain remplissage.</p>
+        <p class="panel-intro">Chaque matériau a son prix, sa densité et son écoulement dans la vis. Le choix s'applique aux prochains godets et aux lignes automatiques.</p>
         <ul id="materials-list" class="materials"></ul>
+      </div>
+      <div class="panel" data-panel="progress" hidden>
+        <div class="prestige">
+          <h3>Brevets INPI</h3>
+          <p>Vous détenez <strong id="patents">0</strong> brevet(s) : <strong id="patent-bonus">+0 %</strong> sur toutes les ventes.</p>
+          <p class="panel-intro">Déposer vos brevets remet l'usine à zéro (trésorerie, équipement, lignes, matériaux, méthodes) en échange de brevets permanents, qui donnent chacun +5 % sur les ventes. Les succès sont conservés.</p>
+          <button id="prestige" class="prestige-btn" type="button">Déposer les brevets</button>
+        </div>
+        <h3>Succès <span id="ach-count" class="ach-count"></span></h3>
+        <p class="panel-intro">Chaque succès donne +2 % sur toutes les ventes.</p>
+        <ul id="ach-list" class="achievements"></ul>
       </div>
 
       <footer class="tools">
@@ -129,6 +169,8 @@
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="data.js"></script>
+  <script src="audio.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
